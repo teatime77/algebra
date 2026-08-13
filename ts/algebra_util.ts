@@ -139,9 +139,7 @@ function getTermByPointerEvent(map : Map<number,Term>, ev : PointerEvent) : Term
 }
 
 
-export async function bodyOnLoad(){
-    await initI18n();
-
+export async function initAlgebra(){
     const pre = document.getElementById("eqs") as HTMLPreElement;
     const text = pre.innerText.split("\n");
     const eqs  = text.map(x => x.trim()).filter(x => x != "")
@@ -165,9 +163,5 @@ export async function bodyOnLoad(){
     }
 
     msg("algebra OK");
-}
-
-function initI18n() {
-    throw new Error("Function not implemented.");
 }
 
