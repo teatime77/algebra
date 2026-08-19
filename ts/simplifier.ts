@@ -2,6 +2,10 @@ import { Speech, sleep, assert, remove } from "@i18n";
 import { Term, App, ConstNum, renderKatexSub } from "@parser";
 import { allTerms } from "./algebra_util.js";
 
+async function sleepAlgebra(){
+    await sleep(200);
+}
+
 /*
     x * c1 * c2 * y = (c1*c2) ・ x * y
 */
@@ -21,12 +25,12 @@ async function simplifyConstNumMultiplier(speech : Speech, ele : HTMLElement, ro
             mul.value.setmul(num.value);
             num.canceled = true;
             renderKatexSub(ele, root.tex());
-            await sleep(1000);
+            await sleepAlgebra();
 
             // 引数内の定数を取り除く。
             num.remArg();
             renderKatexSub(ele, root.tex());
-            await sleep(1000);
+            await sleepAlgebra();
         }
     }
 
@@ -92,7 +96,7 @@ export async function simplifyNestedAddAll(speech : Speech, ele : HTMLElement, r
             remove(add_terms, add_child, false);
 
             renderKatexSub(ele, root.tex());
-            await sleep(1000);
+            await sleepAlgebra();
         }
     }
 
@@ -122,7 +126,7 @@ export async function simplifyCommonConstFactorInAdd(speech : Speech, ele : HTML
             add.args.forEach(x => x.value.set(1));
 
             renderKatexSub(ele, root.tex());
-            await sleep(1000);
+            await sleepAlgebra();
         }
     }
 
@@ -160,7 +164,7 @@ export async function combineLikeTerms(speech : Speech, ele : HTMLElement, root 
                 term.remArg();
 
                 renderKatexSub(ele, root.tex());
-                await sleep(1000);
+                await sleepAlgebra();
             }
         }
 
@@ -197,7 +201,7 @@ async function reduceFraction(speech : Speech, ele : HTMLElement, root : Term){
                     div.replaceTerm(add);
 
                     renderKatexSub(ele, root.tex());
-                    await sleep(1000);    
+                    await sleepAlgebra();    
                 }
             }
             else{
@@ -207,7 +211,7 @@ async function reduceFraction(speech : Speech, ele : HTMLElement, root : Term){
                     div.replaceTerm(dividend);
 
                     renderKatexSub(ele, root.tex());
-                    await sleep(1000);
+                    await sleepAlgebra();
                 }
             }
         }
