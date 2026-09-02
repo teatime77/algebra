@@ -1,6 +1,7 @@
-import { assert, MyError, Speech, msg } from "@i18n";
-import { App, ConstNum, operator, parseMath, Rational, RefVar, Term } from "@parser";
+import { assert, MyError, Speech, msg, fetchText } from "@i18n";
+import { App, ConstNum, operator, parseMath, Rational, RefVar, setIsProof, Term } from "@parser";
 import { simplify } from "./simplifier.js";
+import { testProof } from "./proof.js";
 
 export function makeAdd(trms : Term[]) : App {
     return new App(operator("+"), trms.slice());
@@ -36,6 +37,21 @@ export function allTerms(trm : Term) : Term[] {
 
     return terms;
 }
+
+function fastHashToBigInt(str: string): bigint {
+    let hash = 0xcbf29ce484222325n; // 64-bit FNV offset basis
+    const prime = 0x100000001b3n;   // 64-bit FNV prime
+
+    for (let i = 0; i < str.length; i++) {
+        hash ^= BigInt(str.charCodeAt(i));
+
+        // Multiply by prime and constrain to 64-bit unsigned integer
+        hash = BigInt.asUintN(64, hash * prime);
+    }
+
+    return hash;
+}
+
 
 let hashMap : Map<string, bigint> ;
 
@@ -122,6 +138,24 @@ export function setHashTerm(positions : number[], term : Term) : bigint {
     return term.hash;
 }
 
+
+export function setHashTerm2(term : Term){   
+    const value_str = `${term.value}`;
+    let term_str : string = "";
+    
+    if(term instanceof RefVar){
+        term_str = term.name;
+    }
+    else if(term instanceof App){
+        term.args.forEach(x => setHashTerm2(x));
+        const args_str = term.args.map(x => x.hash2).join(",");
+        term_str = `${term.fncName}:[${args_str}]`;
+    }
+
+    term.hash2 = `<${term.constructor.name}:${value_str}:${term_str}>`;
+    term.hash = fastHashToBigInt(term.hash2);
+}
+
 function getTermByPointerEvent(map : Map<number,Term>, ev : PointerEvent) : Term {
     let target : HTMLElement = ev.target as HTMLElement;
     for(; target != null; target = target.parentElement as HTMLElement){
@@ -138,8 +172,10 @@ function getTermByPointerEvent(map : Map<number,Term>, ev : PointerEvent) : Term
     throw new MyError();
 }
 
-
 export async function initAlgebra(){
+    setIsProof(true);
+    await testProof();
+
     const pre = document.getElementById("eqs") as HTMLPreElement;
     const text = pre.innerText.split("\n");
     const eqs  = text.map(x => x.trim()).filter(x => x != "")
