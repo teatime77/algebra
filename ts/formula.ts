@@ -1,8 +1,19 @@
 import { assert, msg, fetchText } from "@i18n";
-import { RefVar, App, parseMath, Term, ConstNum, Path, isLetter } from "@parser";
+import { RefVar, App, parseMath, Term, ConstNum, Path, isLetter, Variable } from "@parser";
 import { allTerms } from "./algebra_util.js";
 
 class FormulaError extends Error {    
+}
+
+export class Theorem {
+    name : string;
+    vars : Variable[] = [];
+    params : Variable[] = [];
+    formulas : Map<string, App> = new Map<string, App>();
+
+    constructor(name : string){
+        this.name = name;
+    }
 }
 
 function actionRef(name : string) : RefVar {
@@ -219,16 +230,20 @@ export function substByDic(dic : Map<string, Term>, fdic : Map<string, [App, Ter
 
 
 
-export function matchFormula(focus : Term, formula: App) : Term | undefined {
+export function matchFormula(focus : Term, theorem:Theorem, formula: App, sideIdx : number) : Term | undefined {
     assert(formula.isEq());
-    const [sideL, sideR] = formula.args;
-    if(focus instanceof App && sideL instanceof App){
-        if(focus.fncName == sideL.fncName && focus.args.length == sideL.args.length){
+    const side = formula.args[sideIdx];
+    if(focus instanceof App && side instanceof App){
+        if(focus.fncName == side.fncName && focus.args.length == side.args.length){
 
-            const [formula_cp, sideL_cp] = sideL.cloneRoot() as [App, App];
+            const [formula_cp, sideL_cp] = side.cloneRoot() as [App, App];
 
             const dic = new Map<string, Term>();
             const fdic = new Map<string, [App, Term]>();
+
+            for(const param of theorem.params){
+                dic.set(param.name, param.init!);
+            }
             try{
                 matchTerm(dic, fdic, focus, focus, sideL_cp);
 

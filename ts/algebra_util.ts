@@ -2,6 +2,7 @@ import { assert, MyError, Speech, msg, fetchText } from "@i18n";
 import { App, ConstNum, operator, parseMath, Rational, RefVar, setIsProof, Term } from "@parser";
 import { simplify } from "./simplifier.js";
 import { testProof } from "./proof.js";
+import { initTexTest } from "./tex.js";
 
 export function makeAdd(trms : Term[]) : App {
     return new App(operator("+"), trms.slice());
@@ -173,6 +174,8 @@ function getTermByPointerEvent(map : Map<number,Term>, ev : PointerEvent) : Term
 }
 
 export async function initAlgebra(){
+    initTexTest();
+
     setIsProof(true);
     await testProof();
 

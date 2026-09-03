@@ -1,17 +1,7 @@
-import { assert, fetchText, msg, MyError } from "@i18n";
-import { App, ConstNum, Parser, RefVar, Term, Variable } from "@parser";
-import { matchFormula } from "./formula";
+import { $div, assert, fetchText, msg, MyError } from "@i18n";
+import { App, ConstNum, Parser, RefVar, renderKatexSub, Term, Variable } from "@parser";
+import { matchFormula, Theorem } from "./formula";
 import { allTerms, setHashTerm2 } from "./algebra_util";
-
-class Theorem {
-    name : string;
-    vars : Variable[] = [];
-    formulas : Map<string, App> = new Map<string, App>();
-
-    constructor(name : string){
-        this.name = name;
-    }
-}
 
 const theorems : Map<string, Theorem> = new Map<string, Theorem>();
 
@@ -21,8 +11,21 @@ function isExpressionNumber(term : Term) : term is App {
     return term instanceof App && term.fncName == "." && term.args[0] instanceof RefVar && term.args[0].name.startsWith("#");
 }
 
-function getFormula(app: App) : [Theorem, App] {
-    assert(app.fncName == "." && app.args.length == 2 && app.args.every(x => x instanceof RefVar));
+function putStr(s : string){
+    const p = document.createElement("p");
+    p.innerHTML = s;
+    $div("proof-div").appendChild(p);
+}
+
+function putTex(term : Term){
+    const p = document.createElement("p");
+    // p.innerHTML = `$$\n${term.tex()}\n$$`;
+    $div("proof-div").appendChild(p);
+    renderKatexSub(p, term.tex());
+}
+
+function getFormula(app: App) : [Theorem, App, number] {
+    assert(app.fncName == "." && app.args.length <= 3 && app.args.every(x => x instanceof RefVar));
     const names = (app.args as RefVar[]).map(x => x.name);
     const theorem = theorems.get(names[0]);
     if(theorem == undefined){
@@ -33,8 +36,22 @@ function getFormula(app: App) : [Theorem, App] {
     if(formula == undefined){
         throw new MyError();
     }
-    
-    return [theorem, formula];
+
+    if(app.args.length == 2){
+
+        return [theorem, formula, 0];
+    }
+
+    const sideName = (app.args[2] as RefVar).name;
+    switch(sideName){
+    case "L": return [theorem, formula, 0];
+    case "R": return [theorem, formula, formula.args.length - 1];
+    }
+
+    const sideIdx = parseInt(sideName) - 1;
+    assert(0 <= sideIdx && sideIdx <= formula.args.length - 1);
+
+    return [theorem, formula, sideIdx];
 }
 
 function splitKeyword(line : string) : [string, string] {
@@ -83,11 +100,14 @@ export function parseProof(text: string) {
     const lines = text.replaceAll("\r", "").split('\n').map(x => x.trim());
 
     let prevExpr : Term | undefined;
+
     for(const line of lines){
         if(line == ""){
             continue;
         }
         else if(line == "proof"){
+            putTex(prevExpr!);
+            putStr("proof");
         }
         else if(line == "qed"){
         }
@@ -115,8 +135,15 @@ export function parseProof(text: string) {
                 parser.readList(terms);
                 const s = terms.map(x => x.toString()).join(", ");
 
-                const formulaPath = terms.pop();
+                const formulaPath = terms.shift();
                 assert(formulaPath instanceof App);
+
+                const [theorem, formula, sideIdx] = getFormula(formulaPath as App);
+                for(const param of theorem.params){
+                    assert(terms.length != 0);
+                    const term = terms.shift()!;
+                    param.init = term;
+                }
 
                 let target : Term;
 
@@ -128,7 +155,7 @@ export function parseProof(text: string) {
                 }
                 else{
 
-                    target = getTermInApply(prevExpr, terms.pop()!).clone();
+                    target = getTermInApply(prevExpr, terms.shift()!).clone();
 
                     if(terms.length == 0){
 
@@ -136,7 +163,7 @@ export function parseProof(text: string) {
                     }
                     else{
 
-                        root = getTermInApply(prevExpr, terms.pop()!).clone();
+                        root = getTermInApply(prevExpr, terms.shift()!).clone();
                                                 
                         assert(terms.length == 0);
                     }
@@ -154,9 +181,7 @@ export function parseProof(text: string) {
                     }
                 }
 
-                const [theorem, formula] = getFormula(formulaPath as App);
-
-                const formula_R = matchFormula(target, formula)!;
+                const formula_R = matchFormula(target, theorem, formula, sideIdx)!;
                 assert(formula_R != undefined);
 
                 if(target == root){
@@ -167,7 +192,11 @@ export function parseProof(text: string) {
                     target.replaceTerm(formula_R);
                 }
 
+                putStr(line);
+                putTex(root);
+
                 prevExpr = root;
+
                 msg(`apply:[${prevExpr}]`);
             }
             else if(keyword == "namespace"){
@@ -180,14 +209,14 @@ export function parseProof(text: string) {
                 theorems.set(name, prevTheorem);
                 msg(`${keyword}:[${name}]`);
             }
-            else if(keyword == "let"){
+            else if(keyword == "let" || keyword == "param"){
                 if(prevTheorem == undefined){
                     throw new MyError();
                 }
                 // msg(`let:[${line}]`);
 
                 const parser = new Parser(line);
-                parser.nextToken("let");
+                parser.nextToken(keyword);
                 const refVars = parser.readIds();
 
                 let type : Term | undefined;
@@ -206,11 +235,16 @@ export function parseProof(text: string) {
                 for(const id of refVars){
                     const va = new Variable(id.name, type, init);
                     id.refVar = va;
-                    prevTheorem.vars.push(va);
+                    if(keyword == "let"){
+                        prevTheorem.vars.push(va);
+                    }
+                    else{
+                        prevTheorem.params.push(va);
+                    }
                 }
 
                 const vars = prevTheorem.vars.map(x => `${x}`).join(", ");
-                msg(`let:[${vars}]`);
+                msg(`${keyword}:[${vars}]`);
             }
             else if(keyword == "formula"){
             }
