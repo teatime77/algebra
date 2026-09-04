@@ -8,6 +8,16 @@ import { assembleSupSub } from "katex/src/functions/utils/assembleSupSub.js";
 
 const nodeMap = new Map<string, Term>();
 
+let math_container! : HTMLDivElement;
+let selection_box! : HTMLDivElement;
+
+let dragging = false;
+
+let pointer_id: number | null = null;
+
+let start_x = 0;
+let start_y = 0;
+
 interface NodeSelection {
     kind: "node";
     nodeId: string;
@@ -213,10 +223,7 @@ function findAssociativeSelection(container: HTMLElement, mouse_rect: DOMRect): 
  * internally, but validate them anyway.
  */
 
-function validateDataValue(
-    value: string
-): string {
-
+function validateDataValue(value: string): string {
     if ( !/^[A-Za-z0-9_-]+$/.test( value) ) {
 
         throw new Error( `Invalid htmlData value: ${value}` );
@@ -227,7 +234,6 @@ function validateDataValue(
 
 
 function htmlData(attributes: Record<string, string | number>, body: string): string {
-
     const attributes_text = Object.entries(attributes)
             .map( ([name, value]) => `${name}=${validateDataValue(String(value))}` )
             .join(",");
@@ -262,7 +268,6 @@ function makeRectangle( x1: number, y1: number, x2: number, y2: number): DOMRect
  * Is "inner" completely contained in "outer"?
  * ============================================================
  */
-
 function containsRectangle(outer: DOMRect, inner: DOMRect): boolean {
     return (
         inner.left >= outer.left &&
@@ -271,7 +276,6 @@ function containsRectangle(outer: DOMRect, inner: DOMRect): boolean {
         inner.bottom <= outer.bottom
     );
 }
-
 
 /* ============================================================
  * Node selection
@@ -299,18 +303,12 @@ function containsRectangle(outer: DOMRect, inner: DOMRect): boolean {
  *
  * ============================================================
  */
-
-function findNodeSelection( 
-    container: HTMLElement, 
-    mouse_rect: DOMRect
-): SelectionCandidate | null {
-
+function findNodeSelection( container: HTMLElement, mouse_rect: DOMRect): SelectionCandidate | null {
     const elements = container.querySelectorAll<HTMLElement>( 
             ".katex-html [data-astid]" 
         );
 
     let best: SelectionCandidate | null = null;
-
 
     for (const element of elements) {
         const ast_id = element.dataset.astid;
@@ -325,7 +323,6 @@ function findNodeSelection(
             continue;
         }
 
-
         if ( !containsRectangle( mouse_rect, rect) ) {
             continue;
         }
@@ -333,7 +330,6 @@ function findNodeSelection(
         const area = rect.width * rect.height;
 
         if ( best === null || area > best.area) {
-
             best = {
                 selection: {
                     kind: "node",
@@ -370,11 +366,9 @@ function findSelection( container: HTMLElement, mouse_rect: DOMRect): MathSelect
      *
      * Choose the larger mathematical region.
      */
-
     if ( associative_candidate.area > node_candidate.area) {
         return ( associative_candidate.selection);
     }
-
 
     return ( node_candidate.selection);
 }
@@ -385,7 +379,6 @@ function findSelection( container: HTMLElement, mouse_rect: DOMRect): MathSelect
  */
 
 function findAstElement( container: HTMLElement, ast_id: string): HTMLElement | null {
-
     const elements = container.querySelectorAll<HTMLElement>( ".katex-html [data-astid]" );
 
     for (const element of elements) {
@@ -415,9 +408,7 @@ function clearHighlight( container: HTMLElement): void {
         );
 }
 
-
 function highlightSelection( container: HTMLElement, selection: MathSelection | null): void {
-
     clearHighlight(container);
 
     if (!selection)
@@ -427,7 +418,6 @@ function highlightSelection( container: HTMLElement, selection: MathSelection | 
      * Ordinary AST node
      * ========================================================
      */
-
     if (selection.kind === "node") {
         const element = findAstElement(container, selection.nodeId);
 
@@ -435,7 +425,6 @@ function highlightSelection( container: HTMLElement, selection: MathSelection | 
 
         return;
     }
-
 
     /* ========================================================
      * Associative operands
@@ -448,13 +437,10 @@ function highlightSelection( container: HTMLElement, selection: MathSelection | 
             "[data-associndex]"
         );
 
-
     for (const element of operands) {
-
         if ( element.dataset.assocparent !== selection.parentId) {
             continue;
         }
-
 
         const index = Number( element.dataset.associndex);
 
@@ -476,7 +462,6 @@ function highlightSelection( container: HTMLElement, selection: MathSelection | 
      * separators 1 and 2 are highlighted.
      * ========================================================
      */
-
     const separators = 
         container.querySelectorAll<HTMLElement>( 
             ".katex-html " + 
@@ -484,40 +469,17 @@ function highlightSelection( container: HTMLElement, selection: MathSelection | 
             "[data-sepindex]" 
         );
 
-
     for (const element of separators) {
-
         if ( element.dataset.assocsep !== selection.parentId) {
             continue;
         }
 
-
         const index = Number( element.dataset.sepindex);
-
-        if ( index >= selection.startIndex && 
-            index < selection.endIndex) {
-
+        if ( selection.startIndex <= index && index < selection.endIndex) {
             element.classList.add( "ast-selected" );
         }
     }
 }
-
-
-/* ============================================================
- * Create page
- * ============================================================
- */
-
-const math_container = $div("math-container");
-
-const result = $("result-pre") as HTMLPreElement;
-
-const selection_box = document.createElement( "div" );
-
-selection_box.className = "selection-box";
-
-document.body.appendChild( selection_box);
-
 
 /* ============================================================
  * Render KaTeX
@@ -548,38 +510,10 @@ function myLatex(){
     return toTex(expr);
 }
 
-const latex = myLatex();
-
-console.log( latex);
-
-katex.render(
-    latex,
-    math_container,
-    {
-        throwOnError: true,
-
-        displayMode: true,
-
-        trust: context => context.command === "\\htmlData",
-
-        strict: error_code => error_code === "htmlExtension" ? "ignore" : "warn" 
-    }
-);
-
-
 /* ============================================================
  * Pointer interaction
  * ============================================================
  */
-
-let dragging = false;
-
-let pointer_id: number | null = null;
-
-let start_x = 0;
-let start_y = 0;
-
-
 function showSelectionBox( rect: DOMRect): void {
 
     selection_box.style.display = "block";
@@ -592,7 +526,6 @@ function showSelectionBox( rect: DOMRect): void {
 
     selection_box.style.height = `${rect.height}px`;
 }
-
 
 function hideSelectionBox(): void {
     selection_box.style.display = "none";
@@ -620,7 +553,6 @@ function showSelection(selection : MathSelection){
 
 }
 
-
 /*
  * Called continuously while dragging.
  */
@@ -636,8 +568,6 @@ function updateSelection( current_x: number, current_y: number): MathSelection |
     if ( mouse_rect.width < 2 || mouse_rect.height < 2 ) {
         clearHighlight( math_container);
 
-        result.textContent = "";
-
         return null;
     }
 
@@ -648,115 +578,80 @@ function updateSelection( current_x: number, current_y: number): MathSelection |
     return selection;
 }
 
-
-/* ============================================================
- * pointerdown
- * ============================================================
- */
-
-math_container.addEventListener("pointerdown",
-    event => {
-        if (event.button !== 0) {
-            return;
-        }
-
-        event.preventDefault();
-
-        dragging = true;
-        pointer_id = event.pointerId;
-
-        start_x = event.clientX;
-        start_y = event.clientY;
-
-        /*
-         * Clear previous selection when
-         * starting a new drag.
-         */
-
-        clearHighlight(math_container);
-
-        result.textContent = "";
-
-        /*
-         * Keep receiving pointermove even if
-         * pointer leaves the math container.
-         */
-
-        math_container.setPointerCapture( event.pointerId);
-
-
-        showSelectionBox( 
-            makeRectangle( start_x, start_y, start_x, start_y) 
-        );
+function onPointerDown(event : PointerEvent){
+    if (event.button !== 0) {
+        return;
     }
-);
+
+    event.preventDefault();
+
+    dragging = true;
+    pointer_id = event.pointerId;
+
+    start_x = event.clientX;
+    start_y = event.clientY;
+
+    /*
+        * Clear previous selection when
+        * starting a new drag.
+        */
+
+    clearHighlight(math_container);
+
+    /*
+        * Keep receiving pointermove even if
+        * pointer leaves the math container.
+        */
+
+    math_container.setPointerCapture( event.pointerId);
 
 
-/* ============================================================
- * pointermove
- * ============================================================
- */
+    showSelectionBox( 
+        makeRectangle( start_x, start_y, start_x, start_y) 
+    );
+}
 
-math_container.addEventListener("pointermove",
-    event => {
-        if (!dragging || event.pointerId !== pointer_id) {
-            return;
-        }
-
-        updateSelection(event.clientX, event.clientY);
+function onPointerMove(event : PointerEvent){
+    if (!dragging || event.pointerId !== pointer_id) {
+        return;
     }
-);
 
+    updateSelection(event.clientX, event.clientY);
+}
 
-/* ============================================================ 
- * pointerup
- * ============================================================
- */ 
+function onPointerUp(event : PointerEvent){
+    if ( !dragging || event.pointerId !== pointer_id) { 
+        return; 
+    } 
 
-math_container.addEventListener("pointerup", 
-    event => { 
-
-        if ( !dragging || event.pointerId !== pointer_id) { 
-            return; 
-        } 
-
-        const selection = updateSelection( event.clientX, event.clientY);
-        if(selection != null){
-            showSelection(selection);
-        }
-
-        dragging = false;
-
-        hideSelectionBox();
-
-
-        if ( math_container.hasPointerCapture(event.pointerId)) {
-
-            math_container.releasePointerCapture(event.pointerId);
-        }
-
-        pointer_id = null;
+    const selection = updateSelection( event.clientX, event.clientY);
+    if(selection != null){
+        showSelection(selection);
     }
-);
+
+    dragging = false;
+
+    hideSelectionBox();
 
 
-/* ============================================================
- * pointercancel
- * ============================================================
- */
+    if ( math_container.hasPointerCapture(event.pointerId)) {
 
-math_container.addEventListener("pointercancel",
-    event => {
-        if ( event.pointerId !== pointer_id) {
-            return;
-        }
-
-        dragging   = false;
-        pointer_id = null;
-
-        hideSelectionBox();
+        math_container.releasePointerCapture(event.pointerId);
     }
-);
+
+    pointer_id = null;    
+}
+
+function onPointerCancel(event : PointerEvent){
+    if ( event.pointerId !== pointer_id) {
+        return;
+    }
+
+    dragging   = false;
+    pointer_id = null;
+
+    hideSelectionBox();
+}
 
 function nodeId(term:Term) : string {
     const id = `nd${term.id}`;
@@ -846,4 +741,34 @@ function toTex(term : Term) : string {
 }
 
 export function initTexTest(){
+    math_container = $div("math-container");
+
+    selection_box = document.createElement( "div" );
+
+    selection_box.className = "selection-box";
+
+    document.body.appendChild( selection_box);
+
+    const latex = myLatex();
+
+    console.log( latex);
+
+    katex.render(
+        latex,
+        math_container,
+        {
+            throwOnError: true,
+
+            displayMode: true,
+
+            trust: context => context.command === "\\htmlData",
+
+            strict: error_code => error_code === "htmlExtension" ? "ignore" : "warn" 
+        }
+    );
+
+    math_container.addEventListener("pointerdown", onPointerDown);
+    math_container.addEventListener("pointermove", onPointerMove);
+    math_container.addEventListener("pointerup", onPointerUp);
+    math_container.addEventListener("pointercancel", onPointerCancel);
 }
