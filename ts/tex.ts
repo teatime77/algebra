@@ -1,9 +1,12 @@
-import { $, $div, MyError } from "@i18n";
+import { $, $div, assert, msg, MyError } from "@i18n";
 import { App, ConstNum, parseMath, RefVar, setIsProof, Term } from "@parser";
 import katex from "katex";
 // KaTeX ships its stylesheet without TypeScript declarations.
 // @ts-ignore -- this is a runtime-only side-effect import.
 import "katex/dist/katex.min.css";
+import { assembleSupSub } from "katex/src/functions/utils/assembleSupSub.js";
+
+const nodeMap = new Map<string, Term>();
 
 interface NodeSelection {
     kind: "node";
@@ -354,16 +357,13 @@ function findSelection( container: HTMLElement, mouse_rect: DOMRect): MathSelect
         return null;
     }
 
-
     if ( node_candidate === null) {
-        return ( associative_candidate! .selection);
+        return ( associative_candidate!.selection);
     }
-
 
     if ( associative_candidate === null) {
         return ( node_candidate.selection);
     }
-
 
     /*
      * Both are possible.
@@ -526,6 +526,8 @@ document.body.appendChild( selection_box);
 
 function myLatex(){
     setIsProof(true);
+    nodeMap.clear();
+
     const s= `
         limit(
             integrate(
@@ -596,12 +598,33 @@ function hideSelectionBox(): void {
     selection_box.style.display = "none";
 }
 
+function showSelection(selection : MathSelection){
+    if(selection.kind == "node"){
+        const term = nodeMap.get(selection.nodeId)!;
+        assert(term != undefined);
+
+        msg(`select:[${term}]`);
+    }
+    else if(selection.kind == "associative-range"){
+        const parent = nodeMap.get(selection.parentId) as App;
+        assert(parent instanceof App);
+
+        assert(0 <= selection.startIndex && selection.startIndex < selection.endIndex && selection.endIndex + 1 <= parent.args.length);
+        const terms = parent.args.slice(selection.startIndex, selection.endIndex + 1);
+        const s = terms.map(x => `[${x}]`).join(" ");
+        msg(`select:${selection.startIndex}-${selection.endIndex} ${s}`);
+    }
+    else{
+        throw new MyError();
+    }
+
+}
+
 
 /*
  * Called continuously while dragging.
  */
-
-function updateSelection( current_x: number, current_y: number): void {
+function updateSelection( current_x: number, current_y: number): MathSelection | null {
     const mouse_rect = makeRectangle( start_x, start_y, current_x, current_y);
 
     showSelectionBox( mouse_rect);
@@ -615,12 +638,14 @@ function updateSelection( current_x: number, current_y: number): void {
 
         result.textContent = "";
 
-        return;
+        return null;
     }
 
     const selection = findSelection( math_container, mouse_rect);
 
     highlightSelection( math_container, selection);
+
+    return selection;
 }
 
 
@@ -695,11 +720,10 @@ math_container.addEventListener("pointerup",
             return; 
         } 
 
-        /* 
-         * Final calculation. 
-         */
-
-        updateSelection( event.clientX, event.clientY);
+        const selection = updateSelection( event.clientX, event.clientY);
+        if(selection != null){
+            showSelection(selection);
+        }
 
         dragging = false;
 
@@ -721,27 +745,23 @@ math_container.addEventListener("pointerup",
  * ============================================================
  */
 
-math_container.addEventListener(
-    "pointercancel",
-
+math_container.addEventListener("pointercancel",
     event => {
-
         if ( event.pointerId !== pointer_id) {
             return;
         }
 
-
-        dragging = false;
-
+        dragging   = false;
         pointer_id = null;
-
 
         hideSelectionBox();
     }
 );
 
 function nodeId(term:Term) : string {
-    return `nd${term.id}`;
+    const id = `nd${term.id}`;
+    nodeMap.set(id, term);
+    return id;
 }
 
 function toTex(term : Term) : string {
@@ -813,7 +833,7 @@ function toTex(term : Term) : string {
     }
 
     const attributes: Record<string, string | number> = {
-        astid: `nd${nodeId(term)}`
+        astid: nodeId(term)
     };
 
     if(term.parent instanceof App && ["+", "*"].includes(term.parent.fncName)){
