@@ -174,9 +174,8 @@ function getTermByPointerEvent(map : Map<number,Term>, ev : PointerEvent) : Term
 }
 
 export async function initAlgebra(){
-    initTexTest();
-
     setIsProof(true);
+    initTexTest();
     await testProof();
 
     const pre = document.getElementById("eqs") as HTMLPreElement;

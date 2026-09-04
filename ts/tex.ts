@@ -1,5 +1,8 @@
-import { $, $div } from "@i18n";
+import { $, $div, MyError } from "@i18n";
+import { App, ConstNum, parseMath, RefVar, setIsProof, Term } from "@parser";
 import katex from "katex";
+// KaTeX ships its stylesheet without TypeScript declarations.
+// @ts-ignore -- this is a runtime-only side-effect import.
 import "katex/dist/katex.min.css";
 
 interface NodeSelection {
@@ -22,12 +25,6 @@ interface SelectionCandidate {
     selection: MathSelection;
     area: number;
 }
-
-interface AssociativePosition {
-    parentId: string;
-    index: number;
-}
-
 
 function findAssociativeSelection(container: HTMLElement, mouse_rect: DOMRect): SelectionCandidate | null {
     /*
@@ -207,554 +204,6 @@ function findAssociativeSelection(container: HTMLElement, mouse_rect: DOMRect): 
     return best;
 }
 
-/* ============================================================
- * AST definitions
- * ============================================================
- */
-
-interface AstNodeBase {
-    id: string;
-}
-
-interface NumberNode extends AstNodeBase {
-    type: "number";
-    value: number;
-}
-
-interface VariableNode extends AstNodeBase {
-    type: "variable";
-    name: string;
-}
-
-interface AddNode extends AstNodeBase {
-    type: "add";
-    terms: AstNode[];
-}
-
-interface MultiplyNode extends AstNodeBase {
-    type: "multiply";
-    factors: AstNode[];
-}
-
-interface BinaryNode extends AstNodeBase {
-    type: "binary";
-    operator: "-" | "/" | "^";
-    left: AstNode;
-    right: AstNode;
-}
-
-interface RootNode extends AstNodeBase {
-    type: "root";
-
-    radicand: AstNode;
-
-    /*
-     * undefined:
-     *
-     *     sqrt(x)
-     *
-     * degree = 3:
-     *
-     *     cube-root(x)
-     */
-    degree?: AstNode;
-}
-
-interface IntegralNode extends AstNodeBase {
-    type: "integral";
-
-    variable: VariableNode;
-
-    lower: AstNode;
-    upper: AstNode;
-
-    integrand: AstNode;
-}
-
-interface LimitNode extends AstNodeBase {
-    type: "limit";
-
-    variable: VariableNode;
-
-    target: AstNode;
-
-    expression: AstNode;
-}
-
-type AstNode =
-    | NumberNode
-    | VariableNode
-    | AddNode
-    | MultiplyNode
-    | BinaryNode
-    | RootNode
-    | IntegralNode
-    | LimitNode;
-
-
-/* ============================================================
- * Test expression
- *
- *
- *                        sqrt(1 + t^2)
- *              integral ---------------- dt
- *                0..x            t
- *                           1 + -----
- *                               1 + t
- *
- * lim     ---------------------------------
- * x->0                      3
- *                  ( sqrt( (1+x^2)/(1+x) ) )
- *
- *
- * LaTeX:
- *
- *              ∫₀ˣ √(1+t²)/(1+t/(1+t)) dt
- * lim          ---------------------------
- * x→0           (√((1+x²)/(1+x)))³
- *
- * ============================================================
- */
-
-const ast: AstNode = {
-    id: "n1",
-    type: "limit",
-
-    variable: {
-        id: "n2",
-        type: "variable",
-        name: "x"
-    },
-
-    target: {
-        id: "n3",
-        type: "number",
-        value: 0
-    },
-
-    expression: {
-        id: "n4",
-        type: "binary",
-        operator: "/",
-
-        /* ====================================================
-         * Numerator: integral
-         * ====================================================
-         */
-
-        left: {
-            id: "n5",
-            type: "integral",
-
-            variable: {
-                id: "n6",
-                type: "variable",
-                name: "t"
-            },
-
-            lower: {
-                id: "n7",
-                type: "number",
-                value: 0
-            },
-
-            upper: {
-                id: "n8",
-                type: "variable",
-                name: "x"
-            },
-
-            /*
-             *
-             *          sqrt(1+t²)
-             *          -----------
-             *              t
-             *          1 + -----
-             *              1+t
-             *
-             */
-
-            integrand: {
-                id: "n9",
-                type: "binary",
-                operator: "/",
-
-                /*
-                 * sqrt(1+t²)
-                 */
-
-                left: {
-                    id: "n10",
-                    type: "root",
-
-                    radicand: {
-                        id: "n11",
-                        type: "add",
-
-                        terms: [
-                            {
-                                id: "n12",
-                                type: "number",
-                                value: 1
-                            },
-
-                            {
-                                id: "n13",
-                                type: "binary",
-                                operator: "^",
-
-                                left: {
-                                    id: "n14",
-                                    type: "variable",
-                                    name: "t"
-                                },
-
-                                right: {
-                                    id: "n15",
-                                    type: "number",
-                                    value: 2
-                                }
-                            }
-                        ]
-                    }
-                },
-
-                /*
-                 *
-                 *        t
-                 *  1 + -----
-                 *       1+t
-                 *
-                 */
-
-                right: {
-                    id: "n16",
-                    type: "add",
-
-                    terms: [
-                        {
-                            id: "n17",
-                            type: "number",
-                            value: 1
-                        },
-
-                        {
-                            id: "n18",
-                            type: "binary",
-                            operator: "/",
-
-                            left: {
-                                id: "n19",
-                                type: "variable",
-                                name: "t"
-                            },
-
-                            right: {
-                                id: "n20",
-                                type: "add",
-
-                                terms: [
-                                    {
-                                        id: "n21",
-                                        type: "number",
-                                        value: 1
-                                    },
-
-                                    {
-                                        id: "n22",
-                                        type: "variable",
-                                        name: "t"
-                                    }
-                                    ,
-                                    {
-                                        id: "n23",
-                                        type: "number",
-                                        value: 2
-                                    },
-
-                                    {
-                                        id: "n24",
-                                        type: "variable",
-                                        name: "x"
-                                    }
-                                ]
-                            }
-                        }
-                    ]
-                }
-            }
-        },
-
-        /* ====================================================
-         * Denominator:
-         *
-         *          1 + x²
-         *     sqrt -------
-         *          1 + x
-         *
-         * raised to power 3.
-         * ====================================================
-         */
-
-        right: {
-            id: "n23",
-            type: "binary",
-            operator: "^",
-
-            left: {
-                id: "n24",
-                type: "root",
-
-                radicand: {
-                    id: "n25",
-                    type: "binary",
-                    operator: "/",
-
-                    left: {
-                        id: "n26",
-                        type: "add",
-
-                        terms: [
-                            {
-                                id: "n27",
-                                type: "number",
-                                value: 1
-                            },
-
-                            {
-                                id: "n28",
-                                type: "binary",
-                                operator: "^",
-
-                                left: {
-                                    id: "n29",
-                                    type: "variable",
-                                    name: "x"
-                                },
-
-                                right: {
-                                    id: "n30",
-                                    type: "number",
-                                    value: 2
-                                }
-                            }
-                        ]
-                    },
-
-                    right: {
-                        id: "n31",
-                        type: "add",
-
-                        terms: [
-                            {
-                                id: "n32",
-                                type: "number",
-                                value: 1
-                            },
-
-                            {
-                                id: "n33",
-                                type: "variable",
-                                name: "x"
-                            }
-                        ]
-                    }
-                }
-            },
-
-            right: {
-                id: "n34",
-                type: "number",
-                value: 3
-            }
-        }
-    }
-};
-
-
-/* ============================================================
- * Build AST ID -> node map
- * ============================================================
- */
-
-function buildAstMap(
-    root: AstNode
-): Map<string, AstNode> {
-
-    const nodes =
-        new Map<string, AstNode>();
-
-
-    function visit(
-        node: AstNode
-    ): void {
-
-        nodes.set(
-            node.id,
-            node
-        );
-
-
-        switch (node.type) {
-
-            case "number":
-            case "variable":
-
-                return;
-
-
-            case "add":
-
-                for (
-                    const term of node.terms
-                ) {
-                    visit(term);
-                }
-
-                return;
-
-
-            case "multiply":
-
-                for (
-                    const factor of node.factors
-                ) {
-                    visit(factor);
-                }
-
-                return;
-
-
-            case "binary":
-
-                visit(node.left);
-                visit(node.right);
-
-                return;
-
-
-            case "root":
-
-                if (node.degree) {
-                    visit(
-                        node.degree
-                    );
-                }
-
-                visit(
-                    node.radicand
-                );
-
-                return;
-
-
-            case "integral":
-
-                visit(
-                    node.variable
-                );
-
-                visit(
-                    node.lower
-                );
-
-                visit(
-                    node.upper
-                );
-
-                visit(
-                    node.integrand
-                );
-
-                return;
-
-
-            case "limit":
-
-                visit(
-                    node.variable
-                );
-
-                visit(
-                    node.target
-                );
-
-                visit(
-                    node.expression
-                );
-
-                return;
-        }
-    }
-
-
-    visit(root);
-
-    return nodes;
-}
-
-
-const ast_nodes =
-    buildAstMap(ast);
-
-
-/* ============================================================
- * LaTeX generation
- * ============================================================
- */
-
-const PRECEDENCE_ADD = 10;
-const PRECEDENCE_MULTIPLY = 20;
-const PRECEDENCE_POWER = 30;
-const PRECEDENCE_ATOM = 100;
-
-
-function getPrecedence(
-    node: AstNode
-): number {
-
-    switch (node.type) {
-
-        case "number":
-        case "variable":
-        case "root":
-        case "integral":
-        case "limit":
-
-            return PRECEDENCE_ATOM;
-
-
-        case "add":
-
-            return PRECEDENCE_ADD;
-
-
-        case "multiply":
-
-            return PRECEDENCE_MULTIPLY;
-
-
-        case "binary":
-
-            switch (node.operator) {
-
-                case "-":
-
-                    return PRECEDENCE_ADD;
-
-
-                case "/":
-
-                    return PRECEDENCE_MULTIPLY;
-
-
-                case "^":
-
-                    return PRECEDENCE_POWER;
-            }
-    }
-}
-
 
 /*
  * Values inserted into data attributes are generated
@@ -782,200 +231,6 @@ function htmlData(attributes: Record<string, string | number>, body: string): st
 
     return (`\\htmlData{${attributes_text}}{${body}}`);
 }
-
-function associativeSeparator(parent_id: string, separator_index: number, latex: string): string {
-    return htmlData(
-        {
-            assocsep: parent_id,
-            sepindex: separator_index
-        },
-        latex
-    );
-}
-
-function toLatex(node: AstNode,parent_precedence = 0,associative_position?: AssociativePosition): string {
-
-    let body: string;
-
-    switch (node.type) {
-        case "number":
-            body = String(node.value);
-
-            break;
-
-
-        case "variable":
-
-            body = node.name;
-            break;
-
-        case "add": {
-
-            const parts: string[] = [];
-
-            for (let index = 0; index < node.terms.length; ++index) {
-                if (index > 0) {
-
-                    parts.push( associativeSeparator(node.id, index - 1, "+") );
-                }
-
-                parts.push(
-                    toLatex(
-                        node.terms[index],
-                        PRECEDENCE_ADD,
-                        {
-                            parentId: node.id,
-                            index
-                        }
-                    )
-                );
-            }
-
-            body = parts.join(" ");
-
-            break;
-        }
-
-        case "multiply": {
-
-            const parts: string[] = [];
-
-            for (let index = 0; index < node.factors.length; ++index) {
-                if (index > 0) {
-
-                    parts.push(
-                        associativeSeparator(
-                            node.id,
-                            index - 1,
-                            "\\cdot"
-                        )
-                    );
-                }
-
-                parts.push(
-                    toLatex(
-                        node.factors[index],
-                        PRECEDENCE_MULTIPLY,
-                        {
-                            parentId: node.id,
-                            index
-                        }
-                    )
-                );
-            }
-
-            body =
-                parts.join(" ");
-
-            break;
-        }
-
-        case "binary": {
-            switch (node.operator) {
-                case "-":
-
-                    body =
-                        `${toLatex(
-                            node.left,
-                            PRECEDENCE_ADD
-                        )} - ${toLatex(
-                            node.right,
-                            PRECEDENCE_ADD + 1
-                        )}`;
-
-                    break;
-
-
-                case "/":
-
-                    body =
-                        `\\frac{` +
-                        `${toLatex(node.left)}` +
-                        `}{` +
-                        `${toLatex(node.right)}` +
-                        `}`;
-
-                    break;
-
-
-                case "^":
-
-                    body =
-                        `{${toLatex(
-                            node.left,
-                            PRECEDENCE_POWER
-                        )}}` +
-                        `^{${toLatex(
-                            node.right
-                        )}}`;
-
-                    break;
-            }
-
-            break;
-        }
-
-
-        case "root": {
-
-            const radicand =
-                toLatex(node.radicand);
-
-            if (node.degree) {
-
-                body =
-                    `\\sqrt[` +
-                    `${toLatex(node.degree)}` +
-                    `]{${radicand}}`;
-            }
-            else {
-
-                body =
-                    `\\sqrt{${radicand}}`;
-            }
-
-            break;
-        }
-
-        case "integral":
-            body =
-                `\\displaystyle ` +
-                `\\int_{${toLatex(node.lower)}}` +
-                `^{${toLatex(node.upper)}} ` +
-                `${toLatex(node.integrand)}` +
-                `\\,d${toLatex(node.variable)}`;
-
-            break;
-
-        case "limit":
-            body =
-                `\\displaystyle ` +
-                `\\lim_{${toLatex(node.variable)}` +
-                `\\to${toLatex(node.target)}} ` +
-                `${toLatex(node.expression)}`;
-
-            break;
-    }
-
-
-    if (getPrecedence(node) < parent_precedence) {
-        body = `\\left(${body}\\right)`;
-    }
-
-    const attributes: Record<string, string | number> = {
-        astid: node.id
-    };
-
-
-    if (associative_position) {
-        attributes.assocparent = associative_position.parentId;
-
-        attributes.associndex = associative_position.index;
-    }
-
-    return htmlData(attributes, body);
-}
-
 
 /* ============================================================
  * Mouse rectangle
@@ -1249,53 +504,6 @@ function highlightSelection( container: HTMLElement, selection: MathSelection | 
 
 
 /* ============================================================
- * Result display
- * ============================================================
- */
-
-function showResult( 
-    result: HTMLElement, 
-    ast_id: string | null
-): void {
-
-    if ( 
-        ast_id === null
-    ) {
-
-        result.textContent = 
-            "No AST node is completely contained.";
-
-        return;
-    }
-
-
-    const node = 
-        ast_nodes.get( 
-            ast_id
-        );
-
-
-    if (!node) {
-
-        result.textContent = 
-            `Unknown AST node: ${ast_id}`;
-
-        return;
-    }
-
-
-    result.textContent = 
-        `Selected AST ID: ${ast_id}` + 
-        `\n\n` +
-        JSON.stringify( 
-            node, 
-            null, 
-            2 
-        );
-}
-
-
-/* ============================================================
  * Create page
  * ============================================================
  */
@@ -1316,7 +524,29 @@ document.body.appendChild( selection_box);
  * ============================================================
  */
 
-const latex = toLatex( ast);
+function myLatex(){
+    setIsProof(true);
+    const s= `
+        limit(
+            integrate(
+                sqrt(1 + t^2) / (1 + t/(1+t*2+x)),
+                t, 0, 1
+            )
+            /
+            root(
+                (1 + x^2) / (1 + x),
+                3
+            )
+            , x, 0
+        )
+    `
+
+    const expr = parseMath(s.replaceAll("\n", " "));
+
+    return toTex(expr);
+}
+
+const latex = myLatex();
 
 console.log( latex);
 
@@ -1510,5 +740,90 @@ math_container.addEventListener(
     }
 );
 
+function nodeId(term:Term) : string {
+    return `nd${term.id}`;
+}
 
-export function initTexTest(){}
+function toTex(term : Term) : string {
+    let body: string;
+
+    if(term instanceof ConstNum){
+        body = ` ${term.text} `;
+    }
+    else if(term instanceof RefVar){
+        body = ` ${term.name} `;
+    }
+    else if(term instanceof App){
+        const args = term.args.map(x => toTex(x));
+
+        switch(term.fncName){
+        case "limit":
+            body =
+                `\\displaystyle ` +
+                `\\lim_{${args[1]}` +
+                `\\to${args[2]}} ` +
+                `${args[0]}`;
+            break;
+
+        case "integrate":
+            body =
+                `\\displaystyle ` +
+                `\\int_{${args[2]}}` +
+                `^{${args[3]}} ` +
+                `${args[0]}` +
+                `\\,d${args[1]}`;
+            break;
+
+        case "sqrt":
+            body = `\\sqrt{${args[0]}}`;
+            break;
+
+        case "root":
+            body = `\\sqrt[${args[1]}]{${args[0]}}`;
+            break;
+
+        case "+":
+            body = args.join(" + ");
+            break;
+
+        case "*":
+            body = args.join(" \\cdot ");
+            break;
+
+        case "/":
+            body = `\\frac{${args[0]}}{${args[1]}}`;
+            break;
+
+        case "^":
+            body = `{${args[0]}}^{${args[1]}}`;
+            break;
+
+        default:
+            throw new MyError();
+        }
+
+        if(term.isOperator() && term.parent != null && term.parent.isOperator() && !term.parent.isDiv()){
+            if(term.parent.precedence() <= term.precedence()){
+                body = `\\left(${body}\\right)`;
+            }            
+        }
+    }
+    else{
+        throw new MyError();
+    }
+
+    const attributes: Record<string, string | number> = {
+        astid: `nd${nodeId(term)}`
+    };
+
+    if(term.parent instanceof App && ["+", "*"].includes(term.parent.fncName)){
+        attributes.assocparent = nodeId(term.parent);
+        attributes.associndex = term.argIdx();
+
+    }
+
+    return htmlData(attributes, body);
+}
+
+export function initTexTest(){
+}
