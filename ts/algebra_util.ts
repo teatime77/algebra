@@ -1,8 +1,21 @@
-import { assert, MyError, Speech, msg, fetchText } from "@i18n";
-import { App, ConstNum, operator, parseMath, Rational, RefVar, setIsProof, Term } from "@parser";
+import { assert, MyError, Speech, msg, fetchText, $div } from "@i18n";
+import { App, ConstNum, operator, parseMath, Rational, RefVar, renderKatexSub, setIsProof, Term } from "@parser";
 import { simplify } from "./simplifier.js";
 import { testProof } from "./proof.js";
 import { initTexTest } from "./tex.js";
+
+export function putStr(div:HTMLDivElement, s : string){
+    const p = document.createElement("p");
+    p.innerHTML = s;
+    div.appendChild(p);
+}
+
+export function putTex(div:HTMLDivElement, term : Term){
+    const p = document.createElement("p");
+    // p.innerHTML = `$$\n${term.tex()}\n$$`;
+    div.appendChild(p);
+    renderKatexSub(p, term.tex());
+}
 
 export function makeAdd(trms : Term[]) : App {
     return new App(operator("+"), trms.slice());
@@ -21,6 +34,24 @@ export function makeEq(trms : Term[]) : App {
 }
 
 
+export function makeAccordion(parent:HTMLElement, title:string) : HTMLDivElement {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    const content = document.createElement("div");
+
+    details.className = "accordion";
+
+    summary.textContent= title;
+
+    content.className = "accordion-content";
+
+    details.appendChild(summary);
+    details.appendChild(content);
+
+    parent.appendChild(details);
+
+    return content;
+}
 export function getAllTerms(t : Term, terms: Term[]){
     terms.push(t);
 

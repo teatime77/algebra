@@ -1,18 +1,206 @@
-import { assert, msg, fetchText } from "@i18n";
-import { RefVar, App, parseMath, Term, ConstNum, Path, isLetter, Variable } from "@parser";
-import { allTerms } from "./algebra_util.js";
+import { assert, msg, fetchText, MyError, $div } from "@i18n";
+import { RefVar, App, parseMath, Term, ConstNum, Path, isLetter, Variable, renderKatexSub, Parser } from "@parser";
+import { allTerms, putStr, putTex, setHashTerm2 } from "./algebra_util.js";
+
+
+export const theorems : Map<string, Theorem> = new Map<string, Theorem>();
 
 class FormulaError extends Error {    
+}
+
+
+function isExpressionNumber(term : Term) : term is App {
+    return term instanceof App && term.fncName == "." && term.args[0] instanceof RefVar && term.args[0].name.startsWith("#");
+}
+
+function getTermInApply(prevExpr : App, t : Term){
+    if(isExpressionNumber(t)){
+        assert(t.args[1] instanceof RefVar);
+        const ref1 = t.args[0] as RefVar;
+        const ref2 = t.args[1] as RefVar;
+        assert(ref1.name == "#0" && ref2.name == "L");
+
+        return prevExpr.leftSide();
+    }
+    else{
+        return t;
+    }
+}
+
+function getFormula(app: App) : [Theorem, App, number] {
+    assert(app.fncName == "." && app.args.length <= 3 && app.args.every(x => x instanceof RefVar));
+    const names = (app.args as RefVar[]).map(x => x.name);
+    const theorem = theorems.get(names[0]);
+    if(theorem == undefined){
+        throw new MyError();
+    }
+
+    const predicate = theorem.getPredicate(names[1]);
+    if(predicate == undefined){
+        throw new MyError();
+    }
+
+    if(app.args.length == 2){
+
+        return [theorem, predicate, 0];
+    }
+
+    const sideName = (app.args[2] as RefVar).name;
+    switch(sideName){
+    case "L": return [theorem, predicate, 0];
+    case "R": return [theorem, predicate, predicate.args.length - 1];
+    }
+
+    const sideIdx = parseInt(sideName) - 1;
+    assert(0 <= sideIdx && sideIdx <= predicate.args.length - 1);
+
+    return [theorem, predicate, sideIdx];
+}
+export class Proof {
+    formula : Formula;
+    prevExpr : Term;
+
+    constructor(formula : Formula){
+        this.formula = formula;
+        this.prevExpr = formula.predicate;
+    }
+
+    stepProof(proofContent : HTMLDivElement, line: string){
+        const parser = new Parser(line.slice(1));
+        const terms:Term[] = [];
+        parser.readList(terms);
+        const s = terms.map(x => x.toString()).join(", ");
+
+        const formulaPath = terms.shift();
+        assert(formulaPath instanceof App);
+
+        const [theorem, formula, sideIdx] = getFormula(formulaPath as App);
+        for(const param of theorem.params){
+            assert(terms.length != 0);
+            const term = terms.shift()!;
+            param.init = term;
+        }
+
+        let target : Term;
+
+        let root : Term;
+        if(terms.length == 0){
+
+            target = this.prevExpr.clone();
+            root   = target;
+        }
+        else{
+            if(!(this.prevExpr instanceof App)){
+                throw new MyError();
+            }
+
+            target = getTermInApply(this.prevExpr, terms.shift()!).clone();
+
+            if(terms.length == 0){
+
+                root = this.prevExpr.clone();
+            }
+            else{
+
+                root = getTermInApply(this.prevExpr, terms.shift()!).clone();
+                                        
+                assert(terms.length == 0);
+            }
+
+            if(root != target){
+
+                setHashTerm2(root);
+                setHashTerm2(target);
+                const target2 = allTerms(root).find(x => x.hash == target.hash);
+                if(target2 == undefined){
+                    msg(`hash:[${root}][${target}]`);
+                }
+                assert(target2 != undefined);
+                target = target2!;
+            }
+        }
+
+        const formula_R = matchFormula(target, theorem, formula, sideIdx)!;
+        assert(formula_R != undefined);
+
+        if(target == root){
+            root = formula_R;
+        }
+        else{
+
+            target.replaceTerm(formula_R);
+        }
+
+        assert(proofContent != undefined);
+        putStr(proofContent, line);
+        putTex(proofContent, root);
+
+        this.prevExpr = root;
+
+        msg(`apply:[${this.prevExpr}]`);        
+    }
+    
+}
+
+export class Formula {
+    predicate : App;
+    proofs : Proof[] = [];
+
+    constructor(predicate : App){
+        this.predicate = predicate;
+    }
+
+    startProof(){
+        const proof = new Proof(this);
+        this.proofs.push(proof);
+    }
+
+    lastProof() : Proof {
+        return this.proofs.at(-1)!;
+    }
 }
 
 export class Theorem {
     name : string;
     vars : Variable[] = [];
     params : Variable[] = [];
-    formulas : Map<string, App> = new Map<string, App>();
+    private formulas = new Map<string, Formula>();
 
     constructor(name : string){
         this.name = name;
+    }
+
+    lastFormula() : Formula {
+        return Array.from(this.formulas.values()).at(-1)!;
+    }
+
+    makeHtml(): HTMLDivElement {
+        const div = document.createElement("div");
+
+        const title = document.createElement("h5");
+        title.textContent = this.name;
+        div.appendChild(title);
+
+        return div;
+    }
+
+    addFormula(id : string, formula: Formula){
+        if(this.formulas.has(id)){
+            throw new MyError();
+        }
+
+        this.formulas.set(id, formula);
+
+        assert(this.lastFormula() === formula);
+    }
+
+    getPredicate(id:string) : App {
+        const formula = this.formulas.get(id);
+        if(formula == undefined){
+            throw new MyError();
+        }
+
+        return formula.predicate;
     }
 }
 
