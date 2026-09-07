@@ -1,6 +1,7 @@
 import { assert, msg, fetchText, MyError, $div } from "@i18n";
 import { RefVar, App, parseMath, Term, ConstNum, Path, isLetter, Variable, renderKatexSub, Parser } from "@parser";
-import { allTerms, putStr, putTex, setHashTerm2 } from "./algebra_util.js";
+import { allTerms, ProofStep, putStr, putTex, setHashTerm2 } from "./algebra_util.js";
+import { Rewrite } from "./ProofStep.js";
 
 
 export const theorems : Map<string, Theorem> = new Map<string, Theorem>();
@@ -27,7 +28,7 @@ function getTermInApply(prevExpr : App, t : Term){
     }
 }
 
-function getFormula(app: App) : [Theorem, App, number] {
+function parthFormulaPath(app: App) : [Theorem, Formula, number] {
     assert(app.fncName == "." && app.args.length <= 3 && app.args.every(x => x instanceof RefVar));
     const names = (app.args as RefVar[]).map(x => x.name);
     const theorem = theorems.get(names[0]);
@@ -35,29 +36,37 @@ function getFormula(app: App) : [Theorem, App, number] {
         throw new MyError();
     }
 
-    const predicate = theorem.getPredicate(names[1]);
+    const formula = theorem.getFormula(names[1]);
+    const predicate = formula.predicate
     if(predicate == undefined){
         throw new MyError();
     }
 
+    let sideIdx : number;
     if(app.args.length == 2){
 
-        return [theorem, predicate, 0];
+        sideIdx = 0;
+    }
+    else{
+
+        const sideName = (app.args[2] as RefVar).name;
+        switch(sideName){
+        case "L": sideIdx = 0; break;
+        case "R": sideIdx = predicate.args.length - 1; break;
+        default:
+            sideIdx = parseInt(sideName) - 1;
+            assert(0 <= sideIdx && sideIdx <= predicate.args.length - 1);
+            break;
+        }
     }
 
-    const sideName = (app.args[2] as RefVar).name;
-    switch(sideName){
-    case "L": return [theorem, predicate, 0];
-    case "R": return [theorem, predicate, predicate.args.length - 1];
-    }
 
-    const sideIdx = parseInt(sideName) - 1;
-    assert(0 <= sideIdx && sideIdx <= predicate.args.length - 1);
-
-    return [theorem, predicate, sideIdx];
+    return [theorem, formula, sideIdx];
 }
+
 export class Proof {
     formula : Formula;
+    proofSteps : ProofStep[] = [];
     prevExpr : Term;
 
     constructor(formula : Formula){
@@ -74,7 +83,7 @@ export class Proof {
         const formulaPath = terms.shift();
         assert(formulaPath instanceof App);
 
-        const [theorem, formula, sideIdx] = getFormula(formulaPath as App);
+        const [theorem, formula, sideIdx] = parthFormulaPath(formulaPath as App);
         for(const param of theorem.params){
             assert(terms.length != 0);
             const term = terms.shift()!;
@@ -120,6 +129,8 @@ export class Proof {
             }
         }
 
+        const rewrite = new Rewrite(formula, sideIdx, root, target);
+
         const formula_R = matchFormula(target, theorem, formula, sideIdx)!;
         assert(formula_R != undefined);
 
@@ -139,7 +150,6 @@ export class Proof {
 
         msg(`apply:[${this.prevExpr}]`);        
     }
-    
 }
 
 export class Formula {
@@ -164,7 +174,7 @@ export class Theorem {
     name : string;
     vars : Variable[] = [];
     params : Variable[] = [];
-    private formulas = new Map<string, Formula>();
+    formulas = new Map<string, Formula>();
 
     constructor(name : string){
         this.name = name;
@@ -194,13 +204,13 @@ export class Theorem {
         assert(this.lastFormula() === formula);
     }
 
-    getPredicate(id:string) : App {
+    getFormula(id:string) : Formula {
         const formula = this.formulas.get(id);
         if(formula == undefined){
             throw new MyError();
         }
 
-        return formula.predicate;
+        return formula;
     }
 }
 
@@ -418,11 +428,11 @@ export function substByDic(dic : Map<string, Term>, fdic : Map<string, [App, Ter
 
 
 
-export function matchFormula(focus : Term, theorem:Theorem, formula: App, sideIdx : number) : Term | undefined {
-    assert(formula.isEq());
-    const side = formula.args[sideIdx];
-    if(focus instanceof App && side instanceof App){
-        if(focus.fncName == side.fncName && focus.args.length == side.args.length){
+export function matchFormula(target : Term, theorem:Theorem, formula: Formula, sideIdx : number) : Term | undefined {
+    assert(formula.predicate.isEq());
+    const side = formula.predicate.args[sideIdx];
+    if(target instanceof App && side instanceof App){
+        if(target.fncName == side.fncName && target.args.length == side.args.length){
 
             const [formula_cp, sideL_cp] = side.cloneRoot() as [App, App];
 
@@ -433,10 +443,10 @@ export function matchFormula(focus : Term, theorem:Theorem, formula: App, sideId
                 dic.set(param.name, param.init!);
             }
             try{
-                matchTerm(dic, fdic, focus, focus, sideL_cp);
+                matchTerm(dic, fdic, target, target, sideL_cp);
 
                 substByDic(dic, fdic, formula_cp);
-                msg(`form : OK ${focus} F:${formula_cp}`);
+                msg(`form : OK ${target} F:${formula_cp}`);
 
                 // const [focusRoot_cp, focus_cp] = focus.cloneRoot() as [App, App];
                 // focus_cp.replaceTerm(formula_cp.args[1]);
@@ -446,7 +456,7 @@ export function matchFormula(focus : Term, theorem:Theorem, formula: App, sideId
             catch(e){
                 if(e instanceof FormulaError){
 
-                    msg(`form : NG ${focus.str()}`);
+                    msg(`form : NG ${target.str()}`);
                 }
                 else{
                     assert(false);
@@ -456,6 +466,26 @@ export function matchFormula(focus : Term, theorem:Theorem, formula: App, sideId
     }
 
     return undefined;
+}
+
+function SearchMatchFormula(target : Term) : [Formula, number][] {
+    const formulaSideIdxes :[Formula, number][] = [];
+
+    for(const [name, theorem] of theorems.entries()){
+        for(const [id, formula] of theorem.formulas.entries()){
+            if(formula.predicate.isEq()){
+                const eq = formula.predicate as App;
+                for(const [sideIdx, side] of eq.args.entries()){
+                    if(matchFormula(target, theorem, formula, sideIdx)){
+
+                        formulaSideIdxes.push([formula, sideIdx]);
+                    }
+                }
+            }
+        }
+    }
+
+    return formulaSideIdxes;
 }
 
 function enumFormulasForTermSelection(sel : TermSelection){

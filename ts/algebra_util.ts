@@ -1,8 +1,5 @@
-import { assert, MyError, Speech, msg, fetchText, $div } from "@i18n";
-import { App, ConstNum, operator, parseMath, Rational, RefVar, renderKatexSub, setIsProof, Term } from "@parser";
-import { simplify } from "./simplifier.js";
-import { testProof } from "./proof.js";
-import { initTexTest } from "./tex.js";
+import { assert, MyError } from "@i18n";
+import { App, ConstNum, operator, Rational, RefVar, renderKatexSub, Term } from "@parser";
 
 import katex from "katex";
 
@@ -206,123 +203,182 @@ function getTermByPointerEvent(map : Map<number,Term>, ev : PointerEvent) : Term
     throw new MyError();
 }
 
-export async function initAlgebra(){
-    setIsProof(true);
-    initTexTest();
-    await testProof();
-
-    const pre = document.getElementById("eqs") as HTMLPreElement;
-    const text = pre.innerText.split("\n");
-    const eqs  = text.map(x => x.trim()).filter(x => x != "")
-
-    const speech = new Speech();
-    // setPlayMode(PlayMode.fastForward);
-    for(const eq of eqs){
-        const term = parseMath(eq);
-
-        const span = document.createElement("span");
-        span.style.height = "30px";
-        span.style.cursor = "default";
-        span.style.userSelect = "none";
-    
-        document.body.appendChild(span);
-    
-        await simplify(speech, span, term);
-
-        const hr = document.createElement("hr");
-        document.body.appendChild(hr);
-    }
-
-    msg("algebra OK");
+export abstract class ProofStep {
+    // abstract applyProofStep() : void;
 }
 
-export interface FormulaMenuItem {
-    id : string
+export interface FormulaAction {
+    type: "action";
+    step: ProofStep;
     name: string;
     latex: string;
 }
 
-export function showFormulaMenu(items: FormulaMenuItem[], x: number, y: number, on_select: (item: FormulaMenuItem) => void): void {
-    // すでに開いているメニューがあれば閉じる
+export interface FormulaSubmenu {
+    type: "submenu";
+    name: string;
+    items: FormulaMenuEntry[];
+}
+
+export type FormulaMenuEntry =
+    | FormulaAction
+    | FormulaSubmenu;
+
+export function showFormulaMenu(
+    items: FormulaMenuEntry[],
+    x: number,
+    y: number,
+    on_select: (item: FormulaAction) => void,
+): void {
     document.querySelector(".formula-popup-menu")?.remove();
 
-    const menu = document.createElement("div");
-    menu.className = "formula-popup-menu";
+    const root_menu = createMenu(items);
 
-    for (const item of items) {
+    root_menu.classList.add("formula-popup-menu");
+    document.body.appendChild(root_menu);
+
+    root_menu.style.left = `${x}px`;
+    root_menu.style.top = `${y}px`;
+
+    adjustPosition(root_menu);
+
+    function createMenu(
+        menu_items: FormulaMenuEntry[],
+    ): HTMLDivElement {
+        const menu = document.createElement("div");
+        menu.className = "formula-menu";
+
+        for (const item of menu_items) {
+            if (item.type === "action") {
+                menu.appendChild(createAction(item));
+            } else {
+                menu.appendChild(createSubmenu(item));
+            }
+        }
+
+        return menu;
+    }
+
+
+    function createAction(
+        item: FormulaAction,
+    ): HTMLButtonElement {
         const button = document.createElement("button");
+
         button.type = "button";
-        button.className = "formula-popup-item";
+        button.className = "formula-menu-item";
 
         const name = document.createElement("span");
-        name.className = "formula-popup-name";
+        name.className = "formula-menu-name";
         name.textContent = item.name;
 
         const formula = document.createElement("span");
-        formula.className = "formula-popup-formula";
+        formula.className = "formula-menu-formula";
 
-        katex.render(item.latex, formula, {
-            throwOnError: false,
-            displayMode: false,
-        });
+        renderKatexSub(formula, item.latex);
 
         button.append(name, formula);
 
-        button.addEventListener("click", () => {
-            close();
+        button.addEventListener("click", (event) => {
+            event.stopPropagation();
 
-            // メニューを閉じてから数式処理を実行
+            close();
             on_select(item);
         });
 
-        menu.appendChild(button);
+        return button;
     }
 
-    document.body.appendChild(menu);
 
-    // いったん配置してサイズを取得する
-    menu.style.left = `${x}px`;
-    menu.style.top = `${y}px`;
+    function createSubmenu(
+        item: FormulaSubmenu,
+    ): HTMLDivElement {
+        const container = document.createElement("div");
+        container.className = "formula-submenu-container";
 
-    // 画面外にはみ出さないように補正
-    const rect = menu.getBoundingClientRect();
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className =
+            "formula-menu-item formula-submenu-button";
 
-    let menu_x = x;
-    let menu_y = y;
+        const name = document.createElement("span");
+        name.className = "formula-menu-name";
+        name.textContent = item.name;
 
-    if (window.innerWidth < rect.right) {
-        menu_x = Math.max(0, window.innerWidth - rect.width);
+        const arrow = document.createElement("span");
+        arrow.className = "formula-submenu-arrow";
+        arrow.textContent = "▶";
+
+        button.append(name, arrow);
+
+        const submenu = createMenu(item.items);
+        submenu.classList.add("formula-submenu");
+
+        container.append(button, submenu);
+
+        return container;
     }
 
-    if (window.innerHeight < rect.bottom) {
-        menu_y = Math.max(0, window.innerHeight - rect.height);
+
+    function adjustPosition(
+        menu: HTMLElement,
+    ): void {
+        const rect = menu.getBoundingClientRect();
+
+        if (rect.right > window.innerWidth) {
+            menu.style.left =
+                `${Math.max(0, window.innerWidth - rect.width)}px`;
+        }
+
+        if (rect.bottom > window.innerHeight) {
+            menu.style.top =
+                `${Math.max(0, window.innerHeight - rect.height)}px`;
+        }
     }
 
-    menu.style.left = `${menu_x}px`;
-    menu.style.top  = `${menu_y}px`;
 
     function close(): void {
-        menu.remove();
+        root_menu.remove();
 
-        document.removeEventListener("pointerdown", handleOutsideClick);
-        document.removeEventListener("keydown", handleKeyDown);
+        document.removeEventListener(
+            "pointerdown",
+            handleOutsideClick,
+        );
+
+        document.removeEventListener(
+            "keydown",
+            handleKeyDown,
+        );
     }
 
-    function handleOutsideClick(event: PointerEvent): void {
-        if (!menu.contains(event.target as Node)) {
+
+    function handleOutsideClick(
+        event: PointerEvent,
+    ): void {
+        if (!root_menu.contains(event.target as Node)) {
             close();
         }
     }
 
-    function handleKeyDown(event: KeyboardEvent): void {
+
+    function handleKeyDown(
+        event: KeyboardEvent,
+    ): void {
         if (event.key === "Escape") {
             close();
         }
     }
 
-    // 現在のクリックで即座に閉じないよう、次のイベントループで登録
+
     setTimeout(() => {
-        document.addEventListener("pointerdown", handleOutsideClick);
-        document.addEventListener("keydown", handleKeyDown);
+        document.addEventListener(
+            "pointerdown",
+            handleOutsideClick,
+        );
+
+        document.addEventListener(
+            "keydown",
+            handleKeyDown,
+        );
     });
 }
