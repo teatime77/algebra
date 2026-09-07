@@ -1,7 +1,7 @@
 import { $div, assert, fetchText, msg, MyError } from "@i18n";
 import { App, Parser, renderKatexSub, Term, Variable } from "@parser";
 import { Formula, Theorem, theorems } from "./formula";
-import { makeAccordion, putStr, putTex } from "./algebra_util";
+import { FormulaMenuItem, makeAccordion, putStr, putTex, showFormulaMenu } from "./algebra_util";
 
 function splitKeyword(line : string) : [string, string] {
     const k = line.indexOf(" ");
@@ -70,9 +70,47 @@ export function parseProof(text: string) {
             prevTheorem.addFormula(tag, formula);
 
             const formulaDiv = document.createElement("div");
-            theoremDiv.appendChild(formulaDiv);
 
-            renderKatexSub(formulaDiv, `\\tag{${tag}} ${formula.predicate.tex()}`)
+            putStr(formulaDiv, tag);
+
+            const btn = document.createElement("button");
+            btn.textContent = "...";
+            btn.addEventListener("click", (event:PointerEvent)=>{
+
+                const items: FormulaMenuItem[] = [
+                    {
+                        id : "1",
+                        name: "加法の交換法則",
+                        latex: "b+a",
+                    },
+                    {
+                        id : "2",
+                        name: "分配法則",
+                        latex: "ab+ac",
+                    },
+                    {
+                        id : "3",
+                        name: "平方差",
+                        latex: "(a+b)(a-b)",
+                    },
+                ];
+
+
+                showFormulaMenu(
+                    items,
+                    event.clientX,
+                    event.clientY,
+                    (item) => {
+                        msg(`selected:${item.name}`);
+                    },
+                );
+            });
+
+            formulaDiv.appendChild(btn);
+
+            putTex(formulaDiv, formula.predicate);
+
+            theoremDiv.appendChild(formulaDiv);
         }
         else{
             const [keyword, name] = splitKeyword(line);

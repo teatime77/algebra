@@ -4,6 +4,8 @@ import { simplify } from "./simplifier.js";
 import { testProof } from "./proof.js";
 import { initTexTest } from "./tex.js";
 
+import katex from "katex";
+
 export function putStr(div:HTMLDivElement, s : string){
     const p = document.createElement("p");
     p.innerHTML = s;
@@ -234,3 +236,93 @@ export async function initAlgebra(){
     msg("algebra OK");
 }
 
+export interface FormulaMenuItem {
+    id : string
+    name: string;
+    latex: string;
+}
+
+export function showFormulaMenu(items: FormulaMenuItem[], x: number, y: number, on_select: (item: FormulaMenuItem) => void): void {
+    // すでに開いているメニューがあれば閉じる
+    document.querySelector(".formula-popup-menu")?.remove();
+
+    const menu = document.createElement("div");
+    menu.className = "formula-popup-menu";
+
+    for (const item of items) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "formula-popup-item";
+
+        const name = document.createElement("span");
+        name.className = "formula-popup-name";
+        name.textContent = item.name;
+
+        const formula = document.createElement("span");
+        formula.className = "formula-popup-formula";
+
+        katex.render(item.latex, formula, {
+            throwOnError: false,
+            displayMode: false,
+        });
+
+        button.append(name, formula);
+
+        button.addEventListener("click", () => {
+            close();
+
+            // メニューを閉じてから数式処理を実行
+            on_select(item);
+        });
+
+        menu.appendChild(button);
+    }
+
+    document.body.appendChild(menu);
+
+    // いったん配置してサイズを取得する
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+
+    // 画面外にはみ出さないように補正
+    const rect = menu.getBoundingClientRect();
+
+    let menu_x = x;
+    let menu_y = y;
+
+    if (window.innerWidth < rect.right) {
+        menu_x = Math.max(0, window.innerWidth - rect.width);
+    }
+
+    if (window.innerHeight < rect.bottom) {
+        menu_y = Math.max(0, window.innerHeight - rect.height);
+    }
+
+    menu.style.left = `${menu_x}px`;
+    menu.style.top  = `${menu_y}px`;
+
+    function close(): void {
+        menu.remove();
+
+        document.removeEventListener("pointerdown", handleOutsideClick);
+        document.removeEventListener("keydown", handleKeyDown);
+    }
+
+    function handleOutsideClick(event: PointerEvent): void {
+        if (!menu.contains(event.target as Node)) {
+            close();
+        }
+    }
+
+    function handleKeyDown(event: KeyboardEvent): void {
+        if (event.key === "Escape") {
+            close();
+        }
+    }
+
+    // 現在のクリックで即座に閉じないよう、次のイベントループで登録
+    setTimeout(() => {
+        document.addEventListener("pointerdown", handleOutsideClick);
+        document.addEventListener("keydown", handleKeyDown);
+    });
+}
