@@ -1,5 +1,5 @@
 import { $, $div, assert, msg, MyError } from "@i18n";
-import { App, ConstNum, parseMath, RefVar, setIsProof, Term } from "@parser";
+import { App, ConstNum, isUnicodeLetter, parseMath, RefVar, setIsProof, Term, texName } from "@parser";
 import katex from "katex";
 // KaTeX ships its stylesheet without TypeScript declarations.
 // @ts-ignore -- this is a runtime-only side-effect import.
@@ -8,7 +8,6 @@ import { assembleSupSub } from "katex/src/functions/utils/assembleSupSub.js";
 
 const nodeMap = new Map<string, Term>();
 
-let math_container! : HTMLDivElement;
 let selection_box! : HTMLDivElement;
 
 let dragging = false;
@@ -486,30 +485,6 @@ function highlightSelection( container: HTMLElement, selection: MathSelection | 
  * ============================================================
  */
 
-function myLatex(){
-    setIsProof(true);
-    nodeMap.clear();
-
-    const s= `
-        limit(
-            integrate(
-                sqrt(1 + t^2) / (1 + t/(1+t*2+x)),
-                t, 0, 1
-            )
-            /
-            root(
-                (1 + x^2) / (1 + x),
-                3
-            )
-            , x, 0
-        )
-    `
-
-    const expr = parseMath(s.replaceAll("\n", " "));
-
-    return toTex(expr);
-}
-
 /* ============================================================
  * Pointer interaction
  * ============================================================
@@ -553,105 +528,133 @@ function showSelection(selection : MathSelection){
 
 }
 
-/*
- * Called continuously while dragging.
- */
-function updateSelection( current_x: number, current_y: number): MathSelection | null {
-    const mouse_rect = makeRectangle( start_x, start_y, current_x, current_y);
+export class TexSelection {
+    mathContainer! : HTMLDivElement;
 
-    showSelectionBox( mouse_rect);
+    constructor(parent:HTMLElement, term:Term){
+        const tex = toTex(term);
+        this.mathContainer = document.createElement( "div" );
+        this.mathContainer.className = "math-container";
+        parent.appendChild(this.mathContainer);
 
-    /*
-     * Ignore tiny accidental movements.
-     */
+        katex.render(
+            tex,
+            this.mathContainer,
+            {
+                throwOnError: true,
+                displayMode: true,
+                trust: context => context.command === "\\htmlData",
+                strict: error_code => error_code === "htmlExtension" ? "ignore" : "warn" 
+            }
+        );
 
-    if ( mouse_rect.width < 2 || mouse_rect.height < 2 ) {
-        clearHighlight( math_container);
-
-        return null;
+        this.mathContainer.addEventListener("pointerdown", this.onPointerDown.bind(this));
+        this.mathContainer.addEventListener("pointermove", this.onPointerMove.bind(this));
+        this.mathContainer.addEventListener("pointerup", this.onPointerUp.bind(this));
+        this.mathContainer.addEventListener("pointercancel", this.onPointerCancel.bind(this));
     }
 
-    const selection = findSelection( math_container, mouse_rect);
-
-    highlightSelection( math_container, selection);
-
-    return selection;
-}
-
-function onPointerDown(event : PointerEvent){
-    if (event.button !== 0) {
-        return;
-    }
-
-    event.preventDefault();
-
-    dragging = true;
-    pointer_id = event.pointerId;
-
-    start_x = event.clientX;
-    start_y = event.clientY;
-
     /*
-        * Clear previous selection when
-        * starting a new drag.
+    * Called continuously while dragging.
+    */
+    updateSelection( current_x: number, current_y: number): MathSelection | null {
+        const mouse_rect = makeRectangle( start_x, start_y, current_x, current_y);
+
+        showSelectionBox( mouse_rect);
+
+        /*
+        * Ignore tiny accidental movements.
         */
 
-    clearHighlight(math_container);
+        if ( mouse_rect.width < 2 || mouse_rect.height < 2 ) {
+            clearHighlight( this.mathContainer);
 
-    /*
-        * Keep receiving pointermove even if
-        * pointer leaves the math container.
-        */
+            return null;
+        }
 
-    math_container.setPointerCapture( event.pointerId);
+        const selection = findSelection( this.mathContainer, mouse_rect);
 
+        highlightSelection( this.mathContainer, selection);
 
-    showSelectionBox( 
-        makeRectangle( start_x, start_y, start_x, start_y) 
-    );
-}
-
-function onPointerMove(event : PointerEvent){
-    if (!dragging || event.pointerId !== pointer_id) {
-        return;
+        return selection;
     }
 
-    updateSelection(event.clientX, event.clientY);
-}
+    onPointerDown(event : PointerEvent){
+        if (event.button !== 0) {
+            return;
+        }
 
-function onPointerUp(event : PointerEvent){
-    if ( !dragging || event.pointerId !== pointer_id) { 
-        return; 
-    } 
+        event.preventDefault();
 
-    const selection = updateSelection( event.clientX, event.clientY);
-    if(selection != null){
-        showSelection(selection);
+        dragging = true;
+        pointer_id = event.pointerId;
+
+        start_x = event.clientX;
+        start_y = event.clientY;
+
+        /*
+            * Clear previous selection when
+            * starting a new drag.
+            */
+
+        clearHighlight(this.mathContainer);
+
+        /*
+            * Keep receiving pointermove even if
+            * pointer leaves the math container.
+            */
+
+        this.mathContainer.setPointerCapture( event.pointerId);
+
+
+        showSelectionBox( 
+            makeRectangle( start_x, start_y, start_x, start_y) 
+        );
     }
 
-    dragging = false;
+    onPointerMove(event : PointerEvent){
+        if (!dragging || event.pointerId !== pointer_id) {
+            return;
+        }
 
-    hideSelectionBox();
-
-
-    if ( math_container.hasPointerCapture(event.pointerId)) {
-
-        math_container.releasePointerCapture(event.pointerId);
+        this.updateSelection(event.clientX, event.clientY);
     }
 
-    pointer_id = null;    
-}
+    onPointerUp(event : PointerEvent){
+        if ( !dragging || event.pointerId !== pointer_id) { 
+            return; 
+        } 
 
-function onPointerCancel(event : PointerEvent){
-    if ( event.pointerId !== pointer_id) {
-        return;
+        const selection = this.updateSelection( event.clientX, event.clientY);
+        if(selection != null){
+            showSelection(selection);
+        }
+
+        dragging = false;
+
+        hideSelectionBox();
+
+
+        if ( this.mathContainer.hasPointerCapture(event.pointerId)) {
+
+            this.mathContainer.releasePointerCapture(event.pointerId);
+        }
+
+        pointer_id = null;    
     }
 
-    dragging   = false;
-    pointer_id = null;
+    onPointerCancel(event : PointerEvent){
+        if ( event.pointerId !== pointer_id) {
+            return;
+        }
 
-    hideSelectionBox();
+        dragging   = false;
+        pointer_id = null;
+
+        hideSelectionBox();
+    }
 }
+
 
 function nodeId(term:Term) : string {
     const id = `nd${term.id}`;
@@ -669,58 +672,120 @@ function toTex(term : Term) : string {
         body = ` ${term.name} `;
     }
     else if(term instanceof App){
-        const args = term.args.map(x => toTex(x));
-
-        switch(term.fncName){
-        case "limit":
-            body =
-                `\\displaystyle ` +
-                `\\lim_{${args[1]}` +
-                `\\to${args[2]}} ` +
-                `${args[0]}`;
-            break;
-
-        case "integrate":
-            body =
-                `\\displaystyle ` +
-                `\\int_{${args[2]}}` +
-                `^{${args[3]}} ` +
-                `${args[0]}` +
-                `\\,d${args[1]}`;
-            break;
-
-        case "sqrt":
-            body = `\\sqrt{${args[0]}}`;
-            break;
-
-        case "root":
-            body = `\\sqrt[${args[1]}]{${args[0]}}`;
-            break;
-
-        case "+":
-            body = args.join(" + ");
-            break;
-
-        case "*":
-            body = args.join(" \\cdot ");
-            break;
-
-        case "/":
-            body = `\\frac{${args[0]}}{${args[1]}}`;
-            break;
-
-        case "^":
-            body = `{${args[0]}}^{${args[1]}}`;
-            break;
-
-        default:
-            throw new MyError();
+        if(term.fnc instanceof RefVar && term.args.length == 1 && term.args[0].isApp("[]")){
+            const list = term.args[0] as App;
+            const listTex = list.args.map(x => toTex(x)).join(", ");
+            body = `{${toTex(term.fnc)}}_{${listTex}}`;
         }
+        else{
 
-        if(term.isOperator() && term.parent != null && term.parent.isOperator() && !term.parent.isDiv()){
-            if(term.parent.precedence() <= term.precedence()){
-                body = `\\left(${body}\\right)`;
-            }            
+            const args = term.args.map(x => toTex(x));
+
+            switch(term.fncName){
+            case "limit":
+                body =
+                    `\\displaystyle ` +
+                    `\\lim_{${args[1]} \\to ${args[2]}} ` +
+                    `${args[0]}`;
+                break;
+
+            case "integrate":
+                body =
+                    `\\displaystyle ` +
+                    `\\int_{${args[2]}}` +
+                    `^{${args[3]}} ` +
+                    `${args[0]}` +
+                    `\\,d${args[1]}`;
+                break;
+
+            case "sin":
+            case "cos":
+            case "tan":
+                if(term.args[0].isAdd() || term.args[0].isMul()){
+
+                    body = `\\${term.fncName}{(${args[0]})}`;
+                }
+                else{
+
+                    body = `\\${term.fncName}{${args[0]}}`;
+                }
+                break;
+            case "sqrt":
+                body = `\\${term.fncName}{${args[0]}}`;
+                break;
+
+            case "root":
+                body = `\\sqrt[${args[1]}]{${args[0]}}`;
+                break;
+
+            case "+":
+                body = "";
+                for(const [i, arg] of term.args.entries()){
+                    assert(arg.value.fval() == arg.value.int());
+                    if(arg.value.fval() < 0){
+                        body += ` - ${args[i]}`;
+                    }
+                    else if(i == 0 || args.length == 1){
+                        body = args[0];
+                    }
+                    else{
+                        body += ` + ${args[i]}`;
+                    }
+                }
+                break;
+
+            case "=":
+                body = args.join(` ${term.fncName} `);
+                break;
+
+            case "*":
+                body = args.join(" \\cdot ");
+                break;
+
+            case "/":
+                body = `\\frac{${args[0]}}{${args[1]}}`;
+                break;
+
+            case "^":
+                if(term.args[0] instanceof App && ["sin","cos","tan"].includes(term.args[0].fncName)){
+
+                    const app = term.args[0];
+                    body = `\\${app.fncName}^{${args[1]}}`;
+                    if(app.args[0].isAdd() || app.args[0].isMul()){
+
+                        body += `( ${toTex(app.args[0])} )`;
+                    }
+                    else{
+
+                        body += ` ${toTex(app.args[0])}`;
+                    }
+                }
+                else{
+
+                    body = `{${args[0]}}^{${args[1]}}`;
+                }
+                break;
+
+            // case "[]":
+            //     assert(term.args[1].isApp("[]"));
+            //     body = `{${args[0]}}_{${args[1]}}`;
+            //     break;
+
+            default:
+                if([...term.fncName].every(x => isUnicodeLetter(x))){
+                    body = `${term.fncName}(${args.join(", ")})`;
+                }
+                else{
+
+                    throw new MyError();
+                }
+            }
+
+            if(term.isOperator() && term.parent != null && term.parent.isOperator() && !term.parent.isDiv()){
+                if(term.parent.precedence() <= term.precedence()){
+                    body = `\\left(${body}\\right)`;
+                }            
+            }
         }
     }
     else{
@@ -741,7 +806,6 @@ function toTex(term : Term) : string {
 }
 
 export function initTexTest(){
-    math_container = $div("math-container");
 
     selection_box = document.createElement( "div" );
 
@@ -749,26 +813,23 @@ export function initTexTest(){
 
     document.body.appendChild( selection_box);
 
-    const latex = myLatex();
+    nodeMap.clear();
 
-    console.log( latex);
+    const s= `
+        limit(
+            integrate(
+                sqrt(1 + t^2) / (1 + t/(1+t*2+x)),
+                t, 0, 1
+            )
+            /
+            root(
+                (1 + x^2) / (1 + x),
+                3
+            )
+            , x, 0
+        )
+    `;
+    const term = parseMath(s.replaceAll("\n", " "));
 
-    katex.render(
-        latex,
-        math_container,
-        {
-            throwOnError: true,
-
-            displayMode: true,
-
-            trust: context => context.command === "\\htmlData",
-
-            strict: error_code => error_code === "htmlExtension" ? "ignore" : "warn" 
-        }
-    );
-
-    math_container.addEventListener("pointerdown", onPointerDown);
-    math_container.addEventListener("pointermove", onPointerMove);
-    math_container.addEventListener("pointerup", onPointerUp);
-    math_container.addEventListener("pointercancel", onPointerCancel);
+    new TexSelection($div("app"), term);
 }

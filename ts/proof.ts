@@ -3,6 +3,7 @@ import { App, Parser, renderKatexSub, Term, Variable } from "@parser";
 import { Formula, Theorem, theorems } from "./formula";
 import { FormulaMenuEntry, makeAccordion, putStr, putTex, showFormulaMenu } from "./algebra_util";
 import { CopySide, CopyTerm } from "./ProofStep";
+import { TexSelection } from "./tex";
 
 function splitKeyword(line : string) : [string, string] {
     const k = line.indexOf(" ");
@@ -174,7 +175,7 @@ export function parseProof(text: string) {
 
             formulaDiv.appendChild(btn);
 
-            putTex(formulaDiv, formula.predicate);
+            new TexSelection(formulaDiv, formula.predicate);
 
             theoremDiv.appendChild(formulaDiv);
         }
