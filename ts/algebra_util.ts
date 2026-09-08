@@ -2,6 +2,7 @@ import { assert, MyError } from "@i18n";
 import { App, ConstNum, operator, Rational, RefVar, renderKatexSub, Term } from "@parser";
 
 import katex from "katex";
+import { PredicateNode } from "./formula";
 
 export function putStr(div:HTMLDivElement, s : string){
     const p = document.createElement("p");
@@ -203,8 +204,27 @@ function getTermByPointerEvent(map : Map<number,Term>, ev : PointerEvent) : Term
     throw new MyError();
 }
 
-export abstract class ProofStep {
-    // abstract applyProofStep() : void;
+export abstract class ProofStep implements PredicateNode {
+    nodeDiv! : HTMLDivElement;
+    prevStep : ProofStep | undefined;
+
+    constructor(prevStep : ProofStep | undefined){
+        this.prevStep = prevStep;
+    }
+
+
+    getResult() : Term {
+        throw new MyError();
+    }
+    applyProofStep() : void {
+        throw new MyError();
+    }
+}
+
+export class DummyStep extends ProofStep {    
+    constructor(){
+        super({} as ProofStep)
+    }
 }
 
 export interface FormulaAction {
@@ -283,7 +303,8 @@ export function showFormulaMenu(
             event.stopPropagation();
 
             close();
-            on_select(item);
+            item.step.applyProofStep();
+            // on_select(item);
         });
 
         return button;

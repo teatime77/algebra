@@ -1,9 +1,8 @@
 import { $div, assert, fetchText, msg, MyError } from "@i18n";
 import { App, Parser, renderKatexSub, Term, Variable } from "@parser";
 import { Formula, Theorem, theorems } from "./formula";
-import { FormulaMenuEntry, makeAccordion, putStr, putTex, showFormulaMenu } from "./algebra_util";
-import { CopySide, CopyTerm } from "./ProofStep";
-import { TexSelection } from "./tex";
+import { DummyStep, FormulaMenuEntry, makeAccordion, putStr, putTex } from "./algebra_util";
+import { CopyTerm, makeFormulaDiv } from "./ProofStep";
 
 function splitKeyword(line : string) : [string, string] {
     const k = line.indexOf(" ");
@@ -28,7 +27,6 @@ function parseExpression(data:string) : App {
     return term;
 }
 
-
 export const formulaMenuItems: FormulaMenuEntry[] = [
     {
         type: "submenu",
@@ -36,13 +34,13 @@ export const formulaMenuItems: FormulaMenuEntry[] = [
         items: [
             {
                 type: "action",
-                step : new CopyTerm(),
+                step : new DummyStep(),
                 name: "加法",
                 latex: "b+a",
             },
             {
                 type: "action",
-                step : new CopyTerm(),
+                step : new DummyStep(),
                 name: "乗法",
                 latex: "ba",
             },
@@ -55,13 +53,13 @@ export const formulaMenuItems: FormulaMenuEntry[] = [
         items: [
             {
                 type: "action",
-                step : new CopyTerm(),
+                step : new DummyStep(),
                 name: "分配法則",
                 latex: "ab+ac",
             },
             {
                 type: "action",
-                step : new CopyTerm(),
+                step : new DummyStep(),
                 name: "平方差",
                 latex: "(a+b)(a-b)",
             },
@@ -70,47 +68,11 @@ export const formulaMenuItems: FormulaMenuEntry[] = [
 
     {
         type: "action",
-        step : new CopyTerm(),
+        step : new DummyStep(),
         name: "簡約",
         latex: "a",
     },
 ];
-
-function makeInitialProofStepMenu(formula: Formula) : FormulaMenuEntry[] {
-    const items: FormulaMenuEntry[] = [];
-
-    if(formula.predicate.isEq()){
-        const eq = formula.predicate as App;
-
-        for(const [sideIdx, side] of eq.args.entries()){
-            let name : string;
-
-            if(sideIdx == 0){
-
-                name = "左辺をコピー";
-            }
-            else if(sideIdx == eq.args.length - 1){
-
-                name = "右辺をコピー";
-            }
-            else{
-                name = `第${sideIdx + 1}辺をコピー`;
-            }
-
-            items.push({
-                type:"action",
-                step : new CopySide(formula, sideIdx),
-                name,
-                latex: side.tex()
-            })
-        }
-    }
-    else{
-        throw new MyError();
-    }
-
-    return items;
-}
 
 export function parseProof(text: string) {
     const lines = text.replaceAll("\r", "").split('\n').map(x => x.trim());
@@ -152,30 +114,12 @@ export function parseProof(text: string) {
             const match = line.match(/^([0-9]+):(.+)$/) as RegExpMatchArray;
             const tag   = match[1];
             const predicate = parseExpression(match[2]);
-            const formula = new Formula(predicate);
-            prevTheorem.addFormula(tag, formula);
 
             const formulaDiv = document.createElement("div");
+            const formula = new Formula(tag, predicate, formulaDiv);
+            prevTheorem.addFormula(tag, formula);
 
-            putStr(formulaDiv, tag);
-
-            const btn = document.createElement("button");
-            btn.textContent = "...";
-            btn.addEventListener("click", (event:PointerEvent)=>{
-
-                showFormulaMenu(
-                    makeInitialProofStepMenu(formula),
-                    event.clientX,
-                    event.clientY,
-                    (item) => {
-                        msg(`selected:${item.name}`);
-                    },
-                );
-            });
-
-            formulaDiv.appendChild(btn);
-
-            new TexSelection(formulaDiv, formula.predicate);
+            makeFormulaDiv(formulaDiv, formula);
 
             theoremDiv.appendChild(formulaDiv);
         }

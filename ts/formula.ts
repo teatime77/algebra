@@ -129,7 +129,7 @@ export class Proof {
             }
         }
 
-        const rewrite = new Rewrite(formula, sideIdx, root, target);
+        // const rewrite = new Rewrite(formula, root, target);
 
         const formula_R = matchFormula(target, theorem, formula, sideIdx)!;
         assert(formula_R != undefined);
@@ -152,12 +152,25 @@ export class Proof {
     }
 }
 
-export class Formula {
+export interface PredicateNode {
+    getResult() : Term;
+    nodeDiv : HTMLDivElement;
+}
+
+export class Formula implements PredicateNode {
+    tag : string;
     predicate : App;
     proofs : Proof[] = [];
+    nodeDiv : HTMLDivElement;
 
-    constructor(predicate : App){
+    constructor(tag : string, predicate : App, formulaDiv : HTMLDivElement){
+        this.tag = tag;
         this.predicate = predicate;
+        this.nodeDiv = formulaDiv;
+    }
+
+    getResult() : Term {
+        return this.predicate;
     }
 
     startProof(){

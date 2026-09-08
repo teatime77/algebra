@@ -8,6 +8,7 @@ import { assembleSupSub } from "katex/src/functions/utils/assembleSupSub.js";
 
 const nodeMap = new Map<string, Term>();
 
+let mathSelection : MathSelection | undefined;
 let selection_box! : HTMLDivElement;
 
 let dragging = false;
@@ -343,13 +344,13 @@ function findNodeSelection( container: HTMLElement, mouse_rect: DOMRect): Select
     return best;
 }
 
-function findSelection( container: HTMLElement, mouse_rect: DOMRect): MathSelection | null {
+function findSelection( container: HTMLElement, mouse_rect: DOMRect): MathSelection | undefined {
     const node_candidate = findNodeSelection( container, mouse_rect);
 
     const associative_candidate = findAssociativeSelection( container, mouse_rect);
 
     if ( node_candidate === null && associative_candidate === null) {
-        return null;
+        return undefined;
     }
 
     if ( node_candidate === null) {
@@ -407,11 +408,8 @@ function clearHighlight( container: HTMLElement): void {
         );
 }
 
-function highlightSelection( container: HTMLElement, selection: MathSelection | null): void {
-    clearHighlight(container);
-
-    if (!selection)
-        return;
+function highlightSelection( container: HTMLElement, selection: MathSelection): void {
+    clearHighlight($div("formula-book"));
 
     /* ========================================================
      * Ordinary AST node
@@ -557,7 +555,7 @@ export class TexSelection {
     /*
     * Called continuously while dragging.
     */
-    updateSelection( current_x: number, current_y: number): MathSelection | null {
+    updateSelection( current_x: number, current_y: number): MathSelection | undefined {
         const mouse_rect = makeRectangle( start_x, start_y, current_x, current_y);
 
         showSelectionBox( mouse_rect);
@@ -569,17 +567,22 @@ export class TexSelection {
         if ( mouse_rect.width < 2 || mouse_rect.height < 2 ) {
             clearHighlight( this.mathContainer);
 
-            return null;
+            return undefined;
         }
 
         const selection = findSelection( this.mathContainer, mouse_rect);
+        if(selection != undefined){
 
-        highlightSelection( this.mathContainer, selection);
+            highlightSelection( this.mathContainer, selection);
+        }
+
 
         return selection;
     }
 
     onPointerDown(event : PointerEvent){
+        mathSelection = undefined;
+
         if (event.button !== 0) {
             return;
         }
@@ -621,13 +624,15 @@ export class TexSelection {
     }
 
     onPointerUp(event : PointerEvent){
+        clearHighlight(this.mathContainer);
+
         if ( !dragging || event.pointerId !== pointer_id) { 
             return; 
         } 
 
-        const selection = this.updateSelection( event.clientX, event.clientY);
-        if(selection != null){
-            showSelection(selection);
+        mathSelection = this.updateSelection( event.clientX, event.clientY);
+        if(mathSelection != undefined){
+            showSelection(mathSelection);
         }
 
         dragging = false;

@@ -1,21 +1,151 @@
-import { Term } from "@parser";
-import { Formula } from "./formula";
-import { ProofStep } from "./algebra_util";
+import { App, Term } from "@parser";
+import { Formula, PredicateNode } from "./formula";
+import { FormulaMenuEntry, ProofStep, putStr, showFormulaMenu } from "./algebra_util";
+import { assert, msg, MyError } from "@i18n";
+import { TexSelection } from "./tex";
 
-class FormulaStep extends ProofStep {
-    formula : Formula;
-    sideIdx : number;
+function makeEqMenu(node:PredicateNode, eq : App) : FormulaMenuEntry[] {
+    const items: FormulaMenuEntry[] = [];
 
-    constructor(formula : Formula, sideIdx : number){
-        super();
-        this.formula = formula;
-        this.sideIdx = sideIdx;
+    for(const [sideIdx, side] of eq.args.entries()){
+        let name : string;
+
+        if(sideIdx == 0){
+
+            name = "左辺をコピー";
+        }
+        else if(sideIdx == eq.args.length - 1){
+
+            name = "右辺をコピー";
+        }
+        else{
+            name = `第${sideIdx + 1}辺をコピー`;
+        }
+
+        items.push({
+            type:"action",
+            step : new CopySide(node, sideIdx),
+            name,
+            latex: side.tex()
+        })
     }
+
+    return items;
 }
 
-export class CopySide extends FormulaStep {
-    constructor(formula : Formula, sideIdx : number){
-        super(formula, sideIdx);
+function makeFormulaMenu(formula : Formula) : FormulaMenuEntry[] {
+    const items: FormulaMenuEntry[] = [];
+
+    if(formula.predicate.isEq()){
+        const eq = formula.predicate as App;
+
+        items.push(...makeEqMenu(formula, eq) );
+    }
+    else{
+        throw new MyError();
+    }
+
+    return items;
+}
+
+function makeProofStepMenu(step : ProofStep) : FormulaMenuEntry[] {
+    if(step.getResult() instanceof App){
+        const app = step.getResult() as App;
+        if(app.isEq()){
+
+            return makeEqMenu(step, app)
+        }
+    }
+    else{
+        return [];
+    }
+
+    return [];
+}
+
+export function makeFormulaDiv(parent:HTMLDivElement, formula: Formula) : HTMLDivElement {
+    const expressDiv = document.createElement("div");
+    if(formula instanceof Formula){
+
+        putStr(expressDiv, formula.tag);
+    }
+
+    const btn = document.createElement("button");
+    btn.textContent = "...";
+    btn.addEventListener("click", (event:PointerEvent)=>{
+
+        showFormulaMenu(
+            makeFormulaMenu(formula),
+            event.clientX,
+            event.clientY,
+            (item) => {
+                msg(`selected:${item.name}`);
+            },
+        );
+    });
+
+    expressDiv.appendChild(btn);
+
+    new TexSelection(expressDiv, formula.predicate);
+
+    parent.appendChild(expressDiv);
+
+    return expressDiv
+}
+
+export function makeProofStepDiv(parent:HTMLDivElement, step: ProofStep) : HTMLDivElement {
+    const expressDiv = document.createElement("div");
+
+    const btn = document.createElement("button");
+    btn.textContent = "...";
+    btn.addEventListener("click", (event:PointerEvent)=>{
+
+        assert(false);
+        showFormulaMenu(
+            makeProofStepMenu(step),
+            event.clientX,
+            event.clientY,
+            (item) => {
+                msg(`selected:${item.name}`);
+            },
+        );
+    });
+
+    expressDiv.appendChild(btn);
+
+    new TexSelection(expressDiv, step.getResult());
+
+    parent.appendChild(expressDiv);
+
+    return expressDiv
+}
+
+export class CopySide extends ProofStep {
+    sourceNode : PredicateNode;
+    sideIdx : number;
+
+    constructor(sourceNode : PredicateNode, sideIdx : number){
+        super(sourceNode instanceof ProofStep ? sourceNode : undefined);
+        this.sourceNode = sourceNode;
+        this.sideIdx = sideIdx;
+        assert(this.sourceNode.getResult() instanceof App);
+    }
+
+    getResult() : Term {
+        const app = this.sourceNode.getResult() as App;
+        assert(app.isEq());
+        return app.getArg(this.sideIdx);
+    }
+
+    applyProofStep() : void {
+        msg(`apply-copy-side:${this.sourceNode.nodeDiv.tagName}`);
+
+        if(this.sourceNode instanceof Formula){
+            const parentDiv = this.sourceNode.nodeDiv;
+            putStr(parentDiv, "start proof");
+
+            makeProofStepDiv(parentDiv, this);
+        }
     }
 }
 
@@ -23,12 +153,12 @@ export class CopyTerm extends ProofStep {
     
 }
 
-export class Rewrite extends FormulaStep {
+export class Rewrite extends ProofStep {
     root : Term;
     target : Term;
 
-    constructor(formula : Formula, sideIdx : number, root : Term, target : Term){
-        super(formula, sideIdx);
+    constructor(prevStep : ProofStep, root : Term, target : Term){
+        super(prevStep);
         this.root   = root;
         this.target = target;
     }
