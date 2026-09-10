@@ -3,6 +3,7 @@ import { initTexTest } from "./tex.js";
 import { testProof } from "./proof.js";
 import { msg, Speech } from "@i18n";
 import { simplify } from "./simplifier.js";
+import { saveData } from "./algebra_util.js";
 
 export { transpose, addEquations, divideEquation, substitute } from "./algebra.js";
 export { initHashTerm, setHashTerm } from "./algebra_util.js";
@@ -10,6 +11,14 @@ export { simplify } from "./simplifier.js";
 export { testGalois } from "./galois.js";
 
 export async function initAlgebra(){
+    await saveData({
+    name: 'test',
+    x: 10,
+    y: 20,
+    values: [1, 2, 3, 4],
+    });
+
+
     setIsProof(true);
     initTexTest();
     await testProof();

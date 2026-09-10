@@ -407,3 +407,25 @@ export function showFormulaMenu(
         );
     });
 }
+
+export async function saveData(data: unknown): Promise<void> {
+//   const response = await fetch('/api/save', {
+//     method: 'POST',
+//     headers: {
+//       'Content-Type': 'application/json',
+//     },
+//     body: JSON.stringify(data, null, 4),
+//   });
+    const response = await fetch('/api/save', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'text/plain',
+  },
+  body: 'Hello\nThis is some text.\n',
+})
+
+
+  if (!response.ok) {
+    throw new Error(`Save failed: ${response.status}`)
+  }
+}
