@@ -1,4 +1,4 @@
-import { assert, msg, fetchText, MyError } from "@i18n";
+import { assert, msg, fetchText, MyError, $div } from "@i18n";
 import { RefVar, App, parseMath, Term, ConstNum, isLetter, Variable, Parser } from "@parser";
 import { allTerms, ProofStep, putStr, putTex, setHashTerm2 } from "./algebra_util.js";
 
@@ -173,9 +173,11 @@ export class Formula implements PredicateNode {
         return this.predicate;
     }
 
-    startProof(){
+    startProof() : Proof {
         const proof = new Proof(this);
         this.proofs.push(proof);
+
+        return proof;
     }
 
     lastProof() : Proof {
@@ -188,23 +190,22 @@ export class Theorem {
     vars : Variable[] = [];
     params : Variable[] = [];
     formulas = new Map<string, Formula>();
+    theoremDiv : HTMLDivElement;
 
     constructor(name : string){
         this.name = name;
+
+        this.theoremDiv = document.createElement("div");
+
+        const title = document.createElement("h5");
+        title.textContent = this.name;
+        this.theoremDiv.appendChild(title);
+
+        $div("formula-book").appendChild(this.theoremDiv);
     }
 
     lastFormula() : Formula {
         return Array.from(this.formulas.values()).at(-1)!;
-    }
-
-    makeHtml(): HTMLDivElement {
-        const div = document.createElement("div");
-
-        const title = document.createElement("h5");
-        title.textContent = this.name;
-        div.appendChild(title);
-
-        return div;
     }
 
     addFormula(id : string, formula: Formula){

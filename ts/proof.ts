@@ -1,13 +1,13 @@
 import { $div, assert, fetchText, msg, MyError } from "@i18n";
 import { App, Parser, renderKatexSub, Term, Variable } from "@parser";
-import { Formula, Theorem, theorems } from "./formula";
+import { Formula, Proof, Theorem, theorems } from "./formula";
 import { DummyStep, FormulaMenuEntry, makeAccordion, putStr, putTex } from "./algebra_util";
 import { makeFormulaDiv } from "./ProofStep";
 
 function splitKeyword(line : string) : [string, string] {
     const k = line.indexOf(" ");
     if(k == -1){
-        return ["", line];
+        return [line, ""];
     }
     const keyword = line.slice(0, k);
     const data = line.slice(k + 1).trim();
@@ -74,120 +74,157 @@ export const formulaMenuItems: FormulaMenuEntry[] = [
     },
 ];
 
-export function parseProof(text: string) {
-    const lines = text.replaceAll("\r", "").split('\n').map(x => x.trim());
+function readProof(lines:string[], proof : Proof){
+    const proofContent = makeAccordion(proof.formula.theorem.theoremDiv, `proof`);
 
-    let prevTheorem : Theorem | undefined;
-    let proofContent : HTMLDivElement | undefined;
-    let theoremDiv  : HTMLDivElement | undefined;
-
-    for(const line of lines){
+    while(lines.length != 0){
+        const line = lines.shift()!;
         if(line == ""){
             continue;
         }
-        else if(line == "proof"){
-            if(prevTheorem == undefined || theoremDiv == undefined){
-                throw new MyError();
-            }
-
-            prevTheorem.lastFormula().startProof();
-
-            putTex(theoremDiv, prevTheorem.lastFormula().predicate);
-
-            proofContent = makeAccordion(theoremDiv, `proof`);
+        else if(line.startsWith("//")){
+            msg(`comment:[${line}]`)
+            continue;
         }
-        else if(line == "qed"){
-            proofContent = undefined;
+
+        const [keyword, name] = splitKeyword(line);
+        if(keyword == "@"){
+            // msg(`apply:[${line}]`)
+
+            proof.stepProof(proofContent!, line);
         }
-        else if(line == "axiom"){
+        else if(keyword == "qed"){
+
+            return;
         }
-        else if(line == "definition"){
+    }
+}
+
+function readFormula(lines:string[], formula : Formula){
+    while(lines.length != 0){
+        const line = lines.shift()!;
+        if(line == ""){
+            continue;
         }
         else if(line.startsWith("//")){
             msg(`comment:[${line}]`)
+            continue;
         }
-        else if(line.match(/^[0-9]+:.+$/)){
-            if(prevTheorem == undefined || theoremDiv == undefined){
-                throw new MyError();
+
+        if(line == "proof"){
+
+            const proof = formula.startProof();
+
+            putTex(formula.theorem.theoremDiv, formula.predicate);
+
+            readProof(lines, proof);
+        }
+        else{
+            lines.unshift(line);
+            return;
+        }
+    }
+}
+
+function readTheorem(lines:string[], theorem : Theorem){
+    assert(!theorems.has(theorem.name));
+    theorems.set(theorem.name, theorem);
+
+    while(lines.length != 0){
+        const line = lines.shift()!;
+        if(line == ""){
+            continue;
+        }
+        else if(line.startsWith("//")){
+            msg(`comment:[${line}]`)
+            continue;
+        }
+
+        const [keyword, name] = splitKeyword(line);
+
+        if(keyword == "let" || keyword == "param"){
+            // msg(`let:[${line}]`);
+
+            const parser = new Parser(line);
+            parser.nextToken(keyword);
+            const refVars = parser.readIds();
+
+            let type : Term | undefined;
+            let init : Term | undefined;
+
+            if(parser.current() == ":"){
+                parser.nextToken(":");
+                type = parser.ArithmeticExpression();
             }
 
+            if(parser.current() == "="){
+                parser.nextToken("=");
+                init = parser.ArithmeticExpression();
+            }
+
+            for(const id of refVars){
+                const va = new Variable(id.name, type, init);
+                id.refVar = va;
+                if(keyword == "let"){
+                    theorem.vars.push(va);
+                }
+                else{
+                    theorem.params.push(va);
+                }
+            }
+
+            const vars = theorem.vars.map(x => `${x}`).join(", ");
+            msg(`${keyword}:[${vars}]`);
+        }
+        else if(line.match(/^[0-9]+:.+$/)){
             const match = line.match(/^([0-9]+):(.+)$/) as RegExpMatchArray;
             const tag   = match[1];
             const predicate = parseExpression(match[2]);
 
             const formulaDiv = document.createElement("div");
-            const formula = new Formula(prevTheorem, tag, predicate, formulaDiv);
-            prevTheorem.addFormula(tag, formula);
+            const formula = new Formula(theorem, tag, predicate, formulaDiv);
+            theorem.addFormula(tag, formula);
 
             makeFormulaDiv(formulaDiv, formula);
 
-            theoremDiv.appendChild(formulaDiv);
+            theorem.theoremDiv.appendChild(formulaDiv);
+
+            readFormula(lines, formula);
+        }
+        else if(keyword == "theorem" || keyword == "law" || keyword == "formula"){
+            lines.unshift(line);
+            return;
+        }
+    }
+}
+
+export function parseMathFile(text: string) {
+    const lines = text.replaceAll("\r", "").split('\n').map(x => x.trim());
+
+    while(lines.length != 0){
+        const line = lines.shift()!;
+        if(line == ""){
+            continue;
+        }
+        else if(line.startsWith("//")){
+            msg(`comment:[${line}]`)
+            continue;
+        }
+
+        const [keyword, name] = splitKeyword(line);
+        if(keyword == "namespace"){
+            msg(`namespace:[${line.slice(9).trim()}]`);
+        }
+        else if(line == "axiom"){
+        }
+        else if(line == "definition"){
         }
         else{
-            const [keyword, name] = splitKeyword(line);
-            if(keyword == "@"){
-                // msg(`apply:[${line}]`)
-                if(prevTheorem == undefined){
-                    throw new MyError();
-                }
-
-                prevTheorem.lastFormula().lastProof().stepProof(proofContent!, line);
-            }
-            else if(keyword == "namespace"){
-                msg(`namespace:[${line.slice(9).trim()}]`);
-            }
-            else if(keyword == "theorem" || keyword == "law" || keyword == "formula"){
-                prevTheorem = new Theorem(name);
-
-                assert(!theorems.has(name));
-                theorems.set(name, prevTheorem);
-
-
-                theoremDiv = prevTheorem.makeHtml();
-                $div("formula-book").appendChild(theoremDiv);
-
-
-
+            if(keyword == "theorem" || keyword == "law" || keyword == "formula"){
                 msg(`${keyword}:[${name}]`);
-            }
-            else if(keyword == "let" || keyword == "param"){
-                if(prevTheorem == undefined){
-                    throw new MyError();
-                }
-                // msg(`let:[${line}]`);
+                const theorem = new Theorem(name);
 
-                const parser = new Parser(line);
-                parser.nextToken(keyword);
-                const refVars = parser.readIds();
-
-                let type : Term | undefined;
-                let init : Term | undefined;
-
-                if(parser.current() == ":"){
-                    parser.nextToken(":");
-                    type = parser.ArithmeticExpression();
-                }
-
-                if(parser.current() == "="){
-                    parser.nextToken("=");
-                    init = parser.ArithmeticExpression();
-                }
-
-                for(const id of refVars){
-                    const va = new Variable(id.name, type, init);
-                    id.refVar = va;
-                    if(keyword == "let"){
-                        prevTheorem.vars.push(va);
-                    }
-                    else{
-                        prevTheorem.params.push(va);
-                    }
-                }
-
-                const vars = prevTheorem.vars.map(x => `${x}`).join(", ");
-                msg(`${keyword}:[${vars}]`);
-            }
-            else if(keyword == "formula"){
+                readTheorem(lines, theorem);
             }
             else{
                 throw new MyError();
@@ -209,7 +246,7 @@ export function parseProof(text: string) {
 export async function testProof(){
     const text = await fetchText("./formula/example.math");
     // msg(`proof:[${text}]`);
-    parseProof(text);
+    parseMathFile(text);
 
     return true;
 }
