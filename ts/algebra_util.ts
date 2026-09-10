@@ -207,23 +207,27 @@ function getTermByPointerEvent(map : Map<number,Term>, ev : PointerEvent) : Term
 export abstract class ProofStep implements PredicateNode {
     nodeDiv! : HTMLDivElement;
     prevStep : ProofStep | undefined;
+    result : Term | undefined;
 
     constructor(prevStep : ProofStep | undefined){
         this.prevStep = prevStep;
     }
 
-
     getResult() : Term {
-        throw new MyError();
+        assert(this.result != undefined);
+        return this.result!;
     }
-    applyProofStep() : void {
-        throw new MyError();
-    }
+
+    abstract applyProofStep() : void;
 }
 
 export class DummyStep extends ProofStep {    
     constructor(){
         super({} as ProofStep)
+    }
+
+    applyProofStep() : void {
+        throw new MyError();
     }
 }
 

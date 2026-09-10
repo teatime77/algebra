@@ -8,7 +8,7 @@ import { assembleSupSub } from "katex/src/functions/utils/assembleSupSub.js";
 
 const nodeMap = new Map<string, Term>();
 
-let mathSelection : MathSelection | undefined;
+export let mathSelection : MathSelection | undefined;
 let selection_box! : HTMLDivElement;
 
 let dragging = false;
@@ -21,6 +21,7 @@ let start_y = 0;
 interface NodeSelection {
     kind: "node";
     nodeId: string;
+    selectedTerm : Term;
 }
 
 interface AssociativeRangeSelection {
@@ -330,10 +331,13 @@ function findNodeSelection( container: HTMLElement, mouse_rect: DOMRect): Select
         const area = rect.width * rect.height;
 
         if ( best === null || area > best.area) {
+            const selectedTerm = nodeMap.get(ast_id)!;
+            assert(selectedTerm != undefined);
             best = {
                 selection: {
                     kind: "node",
-                    nodeId: ast_id
+                    nodeId: ast_id,
+                    selectedTerm
                 },
 
                 area

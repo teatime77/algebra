@@ -2,7 +2,7 @@ import { $div, assert, fetchText, msg, MyError } from "@i18n";
 import { App, Parser, renderKatexSub, Term, Variable } from "@parser";
 import { Formula, Theorem, theorems } from "./formula";
 import { DummyStep, FormulaMenuEntry, makeAccordion, putStr, putTex } from "./algebra_util";
-import { CopyTerm, makeFormulaDiv } from "./ProofStep";
+import { makeFormulaDiv } from "./ProofStep";
 
 function splitKeyword(line : string) : [string, string] {
     const k = line.indexOf(" ");
@@ -116,7 +116,7 @@ export function parseProof(text: string) {
             const predicate = parseExpression(match[2]);
 
             const formulaDiv = document.createElement("div");
-            const formula = new Formula(tag, predicate, formulaDiv);
+            const formula = new Formula(prevTheorem, tag, predicate, formulaDiv);
             prevTheorem.addFormula(tag, formula);
 
             makeFormulaDiv(formulaDiv, formula);
