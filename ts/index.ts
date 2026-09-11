@@ -4,6 +4,7 @@ import { testProof } from "./proof.js";
 import { msg, Speech } from "@i18n";
 import { simplify } from "./simplifier.js";
 import { saveData } from "./algebra_util.js";
+import { initSysVars } from "./formula.js";
 
 export { transpose, addEquations, divideEquation, substitute } from "./algebra.js";
 export { initHashTerm, setHashTerm } from "./algebra_util.js";
@@ -12,6 +13,7 @@ export { testGalois } from "./galois.js";
 
 export async function initAlgebra(){
     setIsProof(true);
+    initSysVars();
     initTexTest();
     await testProof();
 

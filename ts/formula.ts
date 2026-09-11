@@ -2,9 +2,26 @@ import { assert, msg, fetchText, MyError, $div } from "@i18n";
 import { RefVar, App, parseMath, Term, ConstNum, isLetter, Variable, Parser } from "@parser";
 import { allTerms, ProofStep, putStr, putTex, setHashTerm2 } from "./algebra_util.js";
 
+const sysVarNames : string[] = [
+    "π",
+    "limit",
+    "diff",
+    "integrate",
+    "sin",
+    "cos",
+    "tan",
+    "sqrt",
+    "root",
+];
+
+let sysVars : Variable[] = [];
+
 class FormulaError extends Error {    
 }
 
+export function initSysVars(){
+    sysVars = sysVarNames.map(x => new Variable(x, undefined, undefined));
+}
 
 function isExpressionNumber(term : Term) : term is App {
     return term instanceof App && term.fncName == "." && term.args[0] instanceof RefVar && term.args[0].name.startsWith("#");
@@ -80,8 +97,10 @@ export class Proof {
         const parser = new Parser(line.slice(1));
         const terms:Term[] = [];
         parser.readList(terms);
-        const s = terms.map(x => x.toString()).join(", ");
-
+        const s = terms.map(x => `${x}`).join(", ");
+        msg(`proof:${s}`);
+        return;
+/*
         const formulaPath = terms.shift();
         assert(formulaPath instanceof App);
 
@@ -150,6 +169,7 @@ export class Proof {
         this.prevExpr = root;
 
         msg(`apply:[${this.prevExpr}]`);        
+*/
     }
 }
 
@@ -175,6 +195,8 @@ export class Formula implements PredicateNode {
         this.predicate = predicate;
         this.nodeDiv = formulaDiv;
         this.str = `${predicate}`;
+
+        theorem.setRefVars(predicate);
     }
 
     getResult() : Term {
@@ -209,7 +231,7 @@ export class Formula implements PredicateNode {
         }
 
         return str;
-    }
+    }    
 }
 
 export class VarDecl {
@@ -308,6 +330,19 @@ export class Theorem {
         str += Array.from(this.formulas.values()).map(x => `${x}`).join("");
 
         return str;
+    }
+
+    setRefVars(root : Term){
+        const variables = this.varDecls.map(x => x.vars).flat().concat(sysVars);
+        const all_refs = allTerms(root).filter(x => x instanceof RefVar && isLetter(x.name[0])) as RefVar[];
+        for(const ref of all_refs){
+            ref.refVar = variables.find(x => x.name == ref.name);
+            if(ref.refVar == undefined){
+
+                msg(`ref-var:${ref.name} in [${root}]`);
+            }
+            // assert(ref.refVar != undefined, `ref-var:${ref.name}`);
+        }
     }
 }
 
