@@ -68,6 +68,12 @@ export class Proof {
     constructor(formula : Formula){
         this.formula = formula;
         this.prevExpr = formula.predicate;
+        msg(`new proof:${formula.predicate}`);
+    }
+
+    addProofStep(step : ProofStep){
+        step.setProof(this);
+        this.proofSteps.push(step);
     }
 
     stepProof(proofContent : HTMLDivElement, line: string){
@@ -153,21 +159,33 @@ export interface PredicateNode {
 }
 
 export class Formula implements PredicateNode {
+    static formulaIdx = 0;
+    idx : number;
     theorem : Theorem;
     tag : string;
     predicate : App;
     proofs : Proof[] = [];
     nodeDiv : HTMLDivElement;
+    str : string;
 
     constructor(theorem : Theorem, tag : string, predicate : App, formulaDiv : HTMLDivElement){
+        this.idx = Formula.formulaIdx++;
         this.theorem = theorem;
         this.tag = tag;
         this.predicate = predicate;
         this.nodeDiv = formulaDiv;
+        this.str = `${predicate}`;
     }
 
     getResult() : Term {
         return this.predicate;
+    }
+
+    addProof() : Proof {
+        const proof = new Proof(this);
+        this.proofs.push(proof);
+
+        return proof;
     }
 
     startProof() : Proof {
@@ -179,6 +197,18 @@ export class Formula implements PredicateNode {
 
     lastProof() : Proof {
         return this.proofs.at(-1)!;
+    }
+
+    toString() : string {
+        let str = `${this.tag}: ${this.predicate}\n\n`;
+
+        for(const proof of this.proofs){
+            str += "proof\n";
+            str += proof.proofSteps.map(x => `${x}`).join("");
+            str += "qed\n";
+        }
+
+        return str;
     }
 }
 
@@ -275,9 +305,7 @@ export class Theorem {
             str += "\n";
         }
 
-        for(const formula of this.formulas.values()){
-            str += `${formula.tag}: ${formula.predicate}\n\n`;
-        }
+        str += Array.from(this.formulas.values()).map(x => `${x}`).join("");
 
         return str;
     }

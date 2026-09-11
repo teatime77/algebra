@@ -1,8 +1,8 @@
 import { App, Term } from "@parser";
-import { Formula, PredicateNode, SearchMatchFormula } from "./formula";
-import { DummyStep, FormulaMenuEntry, ProofStep, putStr, showFormulaMenu } from "./algebra_util";
+import { Formula, PredicateNode, Proof, SearchMatchFormula } from "./formula";
+import { FormulaMenuEntry, ProofStep, putStr, showFormulaMenu } from "./algebra_util";
 import { assert, msg, MyError } from "@i18n";
-import { mathSelection, TexSelection } from "./tex";
+import { mathSelection, TexSelection, toTex } from "./tex";
 
 function makeEqMenu(node:PredicateNode, eq : App) : FormulaMenuEntry[] {
     const items: FormulaMenuEntry[] = [];
@@ -26,7 +26,7 @@ function makeEqMenu(node:PredicateNode, eq : App) : FormulaMenuEntry[] {
             type:"action",
             step : new CopySide(node, sideIdx),
             name,
-            latex: side.tex()
+            latex: toTex(side)
         })
     }
 
@@ -65,12 +65,12 @@ function makeProofStepMenu(step : ProofStep) : FormulaMenuEntry[] {
 
                     for(const [sideIdx2, side2] of predicate_cp.args.entries()){
                         if(sideIdx2 != sideIdx){
-                            const rewrite = new Rewrite(step, mathSelection.selectedTerm, formula.predicate, sideIdx, predicate_cp, sideIdx2);
+                            const rewrite = new Rewrite(step, mathSelection.selectedTerm, formula, sideIdx, predicate_cp, sideIdx2);
                             items.push({
                                 type:"action",
                                 step : rewrite,
                                 name : `${formula.theorem.name}.${formula.tag}`,
-                                latex: side2.tex()
+                                latex: toTex(side2)
                             })
                         }
                     }
@@ -93,13 +93,10 @@ export function makeFormulaDiv(parent:HTMLDivElement, formula: Formula) : HTMLDi
     btn.textContent = "...";
     btn.addEventListener("click", (event:PointerEvent)=>{
 
-        showFormulaMenu(
+        showFormulaMenu(formula,
             makeFormulaMenu(formula),
             event.clientX,
-            event.clientY,
-            (item) => {
-                msg(`selected:${item.name}`);
-            },
+            event.clientY
         );
     });
 
@@ -119,13 +116,10 @@ export function makeProofStepDiv(parent:HTMLDivElement, step: ProofStep) : HTMLD
     btn.textContent = "...";
     btn.addEventListener("click", (event:PointerEvent)=>{
 
-        showFormulaMenu(
+        showFormulaMenu(step.proof!.formula,
             makeProofStepMenu(step),
             event.clientX,
-            event.clientY,
-            (item) => {
-                msg(`selected:${item.name}`);
-            },
+            event.clientY
         );
     });
 
@@ -158,22 +152,34 @@ export class CopySide extends ProofStep {
         msg(`apply-copy-side:${this.sourceNode.nodeDiv.tagName}`);
 
         if(this.sourceNode instanceof Formula){
+            const proof = this.sourceNode.addProof();
+            proof.addProofStep(this);
+
             const parentDiv = this.sourceNode.nodeDiv;
             putStr(parentDiv, "start proof");
 
             makeProofStepDiv(parentDiv, this);
         }
     }
+
+    toString() : string {
+        return `© ${this.sideIdx}, ${this.result}\n`;
+    }
 }
 
 export class Rewrite extends ProofStep {
     target : Term;
+    formula : Formula;
+    sideIdx : number;
     predicate_cp : App;
     sideIdx2 : number
 
-    constructor(prevStep : ProofStep, target : Term, predicate : App, sideIdx : number, predicate_cp : App, sideIdx2 : number){
+    constructor(prevStep : ProofStep, target : Term, formula : Formula, sideIdx : number, predicate_cp : App, sideIdx2 : number){
         super(prevStep);
         this.target = target;
+        this.formula = formula;
+        this.sideIdx = sideIdx;
+
         this.predicate_cp = predicate_cp;
         this.sideIdx2 = sideIdx2;
 
@@ -192,12 +198,19 @@ export class Rewrite extends ProofStep {
     }
 
     applyProofStep() : void {
-        assert(this.prevStep != undefined);
+        if(this.prevStep == undefined || this.prevStep.proof == undefined){
+            throw new MyError();
+        }
+        this.prevStep.proof.addProofStep(this);
         msg(`apply rewrite`);
 
         const parentDiv = this.prevStep!.nodeDiv;
 
         makeProofStepDiv(parentDiv, this);
+    }
+
+    toString() : string {
+        return `@ ${this.target}, #${this.formula.theorem.name}.${this.formula.tag}.${this.sideIdx}, ${this.sideIdx2}, ${this.result} \n`;
     }
 }
 

@@ -254,10 +254,10 @@ export async function testProof(){
     await saveData("output.math", mathLib.toString());
 
 
-    const text2 = await fetchText("./output/output.math");
-    console.log(text2);
-    parseMathFile(text2);
-    await saveData("output2.math", mathLib.toString());
+    // const text2 = await fetchText("./output/output.math");
+    // console.log(text2);
+    // parseMathFile(text2);
+    // await saveData("output2.math", mathLib.toString());
 
     return true;
 }

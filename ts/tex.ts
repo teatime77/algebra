@@ -671,7 +671,7 @@ function nodeId(term:Term) : string {
     return id;
 }
 
-function toTex(term : Term) : string {
+export function toTex(term : Term) : string {
     let body: string;
 
     if(term instanceof ConstNum){

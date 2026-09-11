@@ -2,7 +2,7 @@ import { assert, MyError } from "@i18n";
 import { App, ConstNum, operator, Rational, RefVar, renderKatexSub, Term } from "@parser";
 
 import katex from "katex";
-import { PredicateNode } from "./formula";
+import { Formula, mathLib, PredicateNode, Proof } from "./formula";
 
 export function putStr(div:HTMLDivElement, s : string){
     const p = document.createElement("p");
@@ -205,6 +205,7 @@ function getTermByPointerEvent(map : Map<number,Term>, ev : PointerEvent) : Term
 }
 
 export abstract class ProofStep implements PredicateNode {
+    proof! : Proof;
     nodeDiv! : HTMLDivElement;
     prevStep : ProofStep | undefined;
     result : Term | undefined;
@@ -213,12 +214,17 @@ export abstract class ProofStep implements PredicateNode {
         this.prevStep = prevStep;
     }
 
+    setProof(proof : Proof){
+        this.proof = proof;
+    }
+
     getResult() : Term {
         assert(this.result != undefined);
         return this.result!;
     }
 
     abstract applyProofStep() : void;
+    abstract toString() : string;
 }
 
 export class DummyStep extends ProofStep {    
@@ -228,6 +234,10 @@ export class DummyStep extends ProofStep {
 
     applyProofStep() : void {
         throw new MyError();
+    }
+
+    toString() : string {
+        return "dummy-step";
     }
 }
 
@@ -248,11 +258,10 @@ export type FormulaMenuEntry =
     | FormulaAction
     | FormulaSubmenu;
 
-export function showFormulaMenu(
+export function showFormulaMenu(formula: Formula, 
     items: FormulaMenuEntry[],
     x: number,
-    y: number,
-    on_select: (item: FormulaAction) => void,
+    y: number
 ): void {
     document.querySelector(".formula-popup-menu")?.remove();
 
@@ -274,7 +283,7 @@ export function showFormulaMenu(
 
         for (const item of menu_items) {
             if (item.type === "action") {
-                menu.appendChild(createAction(item));
+                menu.appendChild(createAction(formula, item));
             } else {
                 menu.appendChild(createSubmenu(item));
             }
@@ -284,9 +293,7 @@ export function showFormulaMenu(
     }
 
 
-    function createAction(
-        item: FormulaAction,
-    ): HTMLButtonElement {
+    function createAction(formula: Formula, item: FormulaAction): HTMLButtonElement {
         const button = document.createElement("button");
 
         button.type = "button";
@@ -296,19 +303,20 @@ export function showFormulaMenu(
         name.className = "formula-menu-name";
         name.textContent = item.name;
 
-        const formula = document.createElement("span");
-        formula.className = "formula-menu-formula";
+        const formulaSpan = document.createElement("span");
+        formulaSpan.className = "formula-menu-formula";
 
-        renderKatexSub(formula, item.latex);
+        renderKatexSub(formulaSpan, item.latex);
 
-        button.append(name, formula);
+        button.append(name, formulaSpan);
 
-        button.addEventListener("click", (event) => {
+        button.addEventListener("click", async(event) => {
             event.stopPropagation();
 
             close();
             item.step.applyProofStep();
-            // on_select(item);
+
+            await saveData("output2.math", mathLib.toString());
         });
 
         return button;
