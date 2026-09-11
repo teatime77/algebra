@@ -11,14 +11,6 @@ export { simplify } from "./simplifier.js";
 export { testGalois } from "./galois.js";
 
 export async function initAlgebra(){
-    await saveData({
-    name: 'test',
-    x: 10,
-    y: 20,
-    values: [1, 2, 3, 4],
-    });
-
-
     setIsProof(true);
     initTexTest();
     await testProof();

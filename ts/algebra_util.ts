@@ -408,24 +408,23 @@ export function showFormulaMenu(
     });
 }
 
-export async function saveData(data: unknown): Promise<void> {
-//   const response = await fetch('/api/save', {
-//     method: 'POST',
-//     headers: {
-//       'Content-Type': 'application/json',
-//     },
-//     body: JSON.stringify(data, null, 4),
-//   });
+export async function saveData(filename: string, data: unknown): Promise<void> {
+    const type = typeof data == "string" ? "text" : "json";
+
     const response = await fetch('/api/save', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'text/plain',
-  },
-  body: 'Hello\nThis is some text.\n',
-})
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            filename,
+            type,
+            data,
+        }),
+    })
 
-
-  if (!response.ok) {
-    throw new Error(`Save failed: ${response.status}`)
-  }
+    if (!response.ok) {
+        throw new Error(`Save failed: ${response.status}`)
+    }
 }
+

@@ -1,7 +1,7 @@
 import { $div, assert, fetchText, msg, MyError } from "@i18n";
 import { App, Parser, renderKatexSub, Term, Variable } from "@parser";
-import { Formula, Proof, Theorem, theorems } from "./formula";
-import { DummyStep, FormulaMenuEntry, makeAccordion, putStr, putTex } from "./algebra_util";
+import { Formula, MathLib, mathLib, Proof, Theorem, VarDecl } from "./formula";
+import { DummyStep, FormulaMenuEntry, makeAccordion, putStr, putTex, saveData } from "./algebra_util";
 import { makeFormulaDiv } from "./ProofStep";
 
 function splitKeyword(line : string) : [string, string] {
@@ -74,6 +74,8 @@ export const formulaMenuItems: FormulaMenuEntry[] = [
     },
 ];
 
+let comments : string[] = [];
+
 function readProof(lines:string[], proof : Proof){
     const proofContent = makeAccordion(proof.formula.theorem.theoremDiv, `proof`);
 
@@ -107,7 +109,8 @@ function readFormula(lines:string[], formula : Formula){
             continue;
         }
         else if(line.startsWith("//")){
-            msg(`comment:[${line}]`)
+            msg(`comment:[${line}]`);
+            comments.push(line);
             continue;
         }
 
@@ -126,9 +129,41 @@ function readFormula(lines:string[], formula : Formula){
     }
 }
 
+function readVarDecl(theorem:Theorem, keyword: string, line: string){
+    const parser = new Parser(line);
+    parser.nextToken(keyword);
+    const refVars = parser.readIds();
+
+    let type : Term | undefined;
+    let init : Term | undefined;
+
+    if(parser.current() == ":"){
+        parser.nextToken(":");
+        type = parser.ArithmeticExpression();
+    }
+
+    if(parser.current() == "="){
+        parser.nextToken("=");
+        init = parser.ArithmeticExpression();
+    }
+
+    const varDecl = new VarDecl(keyword);
+    theorem.varDecls.push(varDecl);
+
+    for(const id of refVars){
+        const va = new Variable(id.name, type, init);
+        id.refVar = va;
+        varDecl.vars.push(va);
+    }
+
+    const vars = varDecl.vars.map(x => `${x}`).join(", ");
+    msg(`${keyword}:[${vars}]`);
+
+}
+
 function readTheorem(lines:string[], theorem : Theorem){
-    assert(!theorems.has(theorem.name));
-    theorems.set(theorem.name, theorem);
+    assert(!mathLib.theorems.has(theorem.name));
+    mathLib.theorems.set(theorem.name, theorem);
 
     while(lines.length != 0){
         const line = lines.shift()!;
@@ -137,6 +172,7 @@ function readTheorem(lines:string[], theorem : Theorem){
         }
         else if(line.startsWith("//")){
             msg(`comment:[${line}]`)
+            comments.push(line);
             continue;
         }
 
@@ -145,36 +181,7 @@ function readTheorem(lines:string[], theorem : Theorem){
         if(keyword == "let" || keyword == "param"){
             // msg(`let:[${line}]`);
 
-            const parser = new Parser(line);
-            parser.nextToken(keyword);
-            const refVars = parser.readIds();
-
-            let type : Term | undefined;
-            let init : Term | undefined;
-
-            if(parser.current() == ":"){
-                parser.nextToken(":");
-                type = parser.ArithmeticExpression();
-            }
-
-            if(parser.current() == "="){
-                parser.nextToken("=");
-                init = parser.ArithmeticExpression();
-            }
-
-            for(const id of refVars){
-                const va = new Variable(id.name, type, init);
-                id.refVar = va;
-                if(keyword == "let"){
-                    theorem.vars.push(va);
-                }
-                else{
-                    theorem.params.push(va);
-                }
-            }
-
-            const vars = theorem.vars.map(x => `${x}`).join(", ");
-            msg(`${keyword}:[${vars}]`);
+            readVarDecl(theorem, keyword, line);
         }
         else if(line.match(/^[0-9]+:.+$/)){
             const match = line.match(/^([0-9]+):(.+)$/) as RegExpMatchArray;
@@ -199,21 +206,26 @@ function readTheorem(lines:string[], theorem : Theorem){
 }
 
 export function parseMathFile(text: string) {
+    mathLib.clear();
+
     const lines = text.replaceAll("\r", "").split('\n').map(x => x.trim());
 
+    comments = [];
     while(lines.length != 0){
         const line = lines.shift()!;
         if(line == ""){
             continue;
         }
         else if(line.startsWith("//")){
-            msg(`comment:[${line}]`)
+            msg(`comment:[${line}]`);
+            comments.push(line);
             continue;
         }
 
         const [keyword, name] = splitKeyword(line);
         if(keyword == "namespace"){
-            msg(`namespace:[${line.slice(9).trim()}]`);
+            mathLib.name = line.slice(9).trim();
+            msg(`namespace:[${mathLib.name}]`);
         }
         else if(line == "axiom"){
         }
@@ -222,7 +234,8 @@ export function parseMathFile(text: string) {
         else{
             if(keyword == "theorem" || keyword == "law" || keyword == "formula"){
                 msg(`${keyword}:[${name}]`);
-                const theorem = new Theorem(name);
+                const theorem = new Theorem(comments, keyword, name);
+                comments = [];
 
                 readTheorem(lines, theorem);
             }
@@ -231,22 +244,20 @@ export function parseMathFile(text: string) {
             }
         }
     }
-
-    
-    // // msg(`parse-Math:[${text}]`);
-    // const parser = new Parser(text);
-    // const trm = parser.RootExpression();
-    // if(parser.token.typeTkn != TokenType.eot){
-    //     throw new MyError();
-    // }
-
-    // trm.setParent(null);
 }
 
 export async function testProof(){
     const text = await fetchText("./formula/example.math");
     // msg(`proof:[${text}]`);
     parseMathFile(text);
+
+    await saveData("output.math", mathLib.toString());
+
+
+    const text2 = await fetchText("./output/output.math");
+    console.log(text2);
+    parseMathFile(text2);
+    await saveData("output2.math", mathLib.toString());
 
     return true;
 }

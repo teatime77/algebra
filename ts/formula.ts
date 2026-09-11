@@ -2,9 +2,6 @@ import { assert, msg, fetchText, MyError, $div } from "@i18n";
 import { RefVar, App, parseMath, Term, ConstNum, isLetter, Variable, Parser } from "@parser";
 import { allTerms, ProofStep, putStr, putTex, setHashTerm2 } from "./algebra_util.js";
 
-
-export const theorems : Map<string, Theorem> = new Map<string, Theorem>();
-
 class FormulaError extends Error {    
 }
 
@@ -30,7 +27,7 @@ function getTermInApply(prevExpr : App, t : Term){
 function parthFormulaPath(app: App) : [Theorem, Formula, number] {
     assert(app.fncName == "." && app.args.length <= 3 && app.args.every(x => x instanceof RefVar));
     const names = (app.args as RefVar[]).map(x => x.name);
-    const theorem = theorems.get(names[0]);
+    const theorem = mathLib.theorems.get(names[0]);
     if(theorem == undefined){
         throw new MyError();
     }
@@ -83,7 +80,7 @@ export class Proof {
         assert(formulaPath instanceof App);
 
         const [theorem, formula, sideIdx] = parthFormulaPath(formulaPath as App);
-        for(const param of theorem.params){
+        for(const param of theorem.params()){
             assert(terms.length != 0);
             const term = terms.shift()!;
             param.init = term;
@@ -185,14 +182,47 @@ export class Formula implements PredicateNode {
     }
 }
 
-export class Theorem {
-    name : string;
+export class VarDecl {
+    kind : string;
     vars : Variable[] = [];
-    params : Variable[] = [];
+
+    constructor(kind : string){
+        this.kind = kind;
+    }
+
+    toString() : string {
+        if(this.vars[0].type != undefined && this.vars.every(x => x.type != undefined && `${x.type}` == `${this.vars[0].type}`)){
+            return `    ${this.kind} ${this.vars.map(x => x.name).join(", ")} : ${this.vars[0].type}\n`;
+        }
+        else{
+            assert(this.vars.length == 1);
+            const va = this.vars[0];
+
+            let str = `    ${this.kind} ${va.name}`;
+            if(va.type != undefined){
+                str += ` : ${va.type}`;
+            }
+            if(va.init != undefined){
+                str += ` = ${va.init}`;
+            }
+
+            return str + "\n";
+        }
+    }
+
+}
+
+export class Theorem {
+    kind : string;
+    name : string;
+    varDecls : VarDecl[] = [];
     formulas = new Map<string, Formula>();
     theoremDiv : HTMLDivElement;
+    comments : string[];
 
-    constructor(name : string){
+    constructor(comments : string[], kind : string, name : string){
+        this.comments = comments;
+        this.kind = kind;
         this.name = name;
 
         this.theoremDiv = document.createElement("div");
@@ -202,6 +232,10 @@ export class Theorem {
         this.theoremDiv.appendChild(title);
 
         $div("formula-book").appendChild(this.theoremDiv);
+    }
+
+    params() : Variable[] {
+        return this.varDecls.filter(vd => vd.kind == "param").map(vd => vd.vars).flat();
     }
 
     lastFormula() : Formula {
@@ -226,7 +260,46 @@ export class Theorem {
 
         return formula;
     }
+
+    toString() : string {
+        let str = "";
+
+        if(this.comments.length != 0){
+            str += this.comments.join("\n") + "\n";
+        }
+
+        str += `${this.kind} ${this.name}\n`;
+
+        if(this.varDecls.length != 0){
+            str += this.varDecls.map(x => x.toString()).join("");
+            str += "\n";
+        }
+
+        for(const formula of this.formulas.values()){
+            str += `${formula.tag}: ${formula.predicate}\n\n`;
+        }
+
+        return str;
+    }
 }
+
+export class MathLib {
+    name! : string;
+    theorems : Map<string, Theorem> = new Map<string, Theorem>();
+
+    clear(){
+        this.theorems.clear();
+    }
+
+    toString() : string{
+        let str = `namespace ${this.name}\n\n`;
+        str += Array.from(this.theorems.values()).map(x => x.toString()).join("");
+
+        return str;
+    }
+}
+
+export const mathLib = new MathLib();
 
 function actionRef(name : string) : RefVar {
     return new RefVar(name);
@@ -453,7 +526,7 @@ export function matchFormula(target : Term, theorem:Theorem, formula: Formula, s
             const dic = new Map<string, Term>();
             const fdic = new Map<string, [App, Term]>();
 
-            for(const param of theorem.params){
+            for(const param of theorem.params()){
                 dic.set(param.name, param.init!);
             }
             try{
@@ -483,7 +556,7 @@ export function matchFormula(target : Term, theorem:Theorem, formula: Formula, s
 export function SearchMatchFormula(target : Term) : [Formula, number, App][] {
     const formulaSideIdxes :[Formula, number, App][] = [];
 
-    for(const [name, theorem] of theorems.entries()){
+    for(const [name, theorem] of mathLib.theorems.entries()){
         for(const [id, formula] of theorem.formulas.entries()){
             if(formula.predicate.isEq()){
                 const eq = formula.predicate as App;
