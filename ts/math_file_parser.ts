@@ -184,24 +184,22 @@ function readTheorem(lines:string[], theorem : Theorem){
 
             readVarDecl(theorem, keyword, line);
         }
-        else if(line.match(/^[0-9]+:.+$/)){
-            const match = line.match(/^([0-9]+):(.+)$/) as RegExpMatchArray;
-            const tag   = match[1];
-            const predicate = parseExpression(match[2]);
+        else if(keyword == "theorem" || keyword == "law" || keyword == "formula"){
+            lines.unshift(line);
+            return;
+        }
+        else{
+            const predicate = parseExpression(line);
 
             const formulaDiv = document.createElement("div");
-            const formula = new Formula(theorem, tag, predicate, formulaDiv);
-            theorem.addFormula(tag, formula);
+            const formula = new Formula(theorem, predicate, formulaDiv);
+            theorem.addFormula(formula);
 
             makeFormulaDiv(formulaDiv, formula);
 
             theorem.theoremDiv.appendChild(formulaDiv);
 
             readFormula(lines, formula);
-        }
-        else if(keyword == "theorem" || keyword == "law" || keyword == "formula"){
-            lines.unshift(line);
-            return;
         }
     }
 }

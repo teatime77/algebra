@@ -37,13 +37,13 @@ export class Formula implements PredicateNode {
     nodeDiv : HTMLDivElement;
     str : string;
 
-    constructor(theorem : Theorem, tag : string, predicate : App, formulaDiv : HTMLDivElement){
+    constructor(theorem : Theorem, predicate : App, formulaDiv : HTMLDivElement){
         this.idx = Formula.formulaIdx++;
         this.theorem = theorem;
-        this.tag = tag;
         this.predicate = predicate;
         this.nodeDiv = formulaDiv;
         this.str = `${predicate}`;
+        this.tag = `${theorem.formulas.size + 1}`;
 
         theorem.setRefVars(predicate);
     }
@@ -71,7 +71,7 @@ export class Formula implements PredicateNode {
     }
 
     toString() : string {
-        let str = `${this.tag}: ${this.predicate}\n\n`;
+        let str = `${this.predicate}\n\n`;
 
         for(const proof of this.proofs){
             str += "proof\n";
@@ -143,12 +143,9 @@ export class Theorem {
         return Array.from(this.formulas.values()).at(-1)!;
     }
 
-    addFormula(id : string, formula: Formula){
-        if(this.formulas.has(id)){
-            throw new MyError();
-        }
+    addFormula(formula: Formula){
 
-        this.formulas.set(id, formula);
+        this.formulas.set(formula.tag, formula);
 
         assert(this.lastFormula() === formula);
     }
