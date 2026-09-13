@@ -1,6 +1,7 @@
 import { $div, assert, fetchText, msg, MyError } from "@i18n";
 import { App, Parser, renderKatexSub, Term, Variable } from "@parser";
-import { Formula, MathLib, mathLib, Proof, Theorem, VarDecl } from "./formula";
+import { Formula, mathLib, Theorem, VarDecl } from "./formula.js";
+import type { Proof } from "./proof.js";
 import { DummyStep, FormulaMenuEntry, makeAccordion, putStr, putTex, saveData } from "./algebra_util";
 import { makeFormulaDiv } from "./ProofStep";
 

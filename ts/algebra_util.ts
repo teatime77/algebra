@@ -2,7 +2,9 @@ import { assert, MyError } from "@i18n";
 import { App, ConstNum, operator, Rational, RefVar, renderKatexSub, Term } from "@parser";
 
 import katex from "katex";
-import { Formula, mathLib, PredicateNode, Proof } from "./formula";
+import { mathLib } from "./formula.js";
+import type { Formula, PredicateNode } from "./formula.js";
+import type { Proof } from "./proof.js";
 
 export function putStr(div:HTMLDivElement, s : string){
     const p = document.createElement("p");

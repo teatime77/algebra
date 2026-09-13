@@ -1,6 +1,6 @@
 import { parseMath, setIsProof } from "@parser";
 import { initTexTest } from "./tex.js";
-import { testProof } from "./proof.js";
+import { testProof } from "./math_file_parser.js";
 import { msg, Speech } from "@i18n";
 import { simplify } from "./simplifier.js";
 import { saveData } from "./algebra_util.js";

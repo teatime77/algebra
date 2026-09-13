@@ -1,5 +1,7 @@
 import { App, Term } from "@parser";
-import { Formula, PredicateNode, Proof, SearchMatchFormula } from "./formula";
+import { Formula } from "./formula.js";
+import type { PredicateNode } from "./formula.js";
+import { SearchMatchFormula } from "./formula_matcher.js";
 import { FormulaMenuEntry, ProofStep, putStr, showFormulaMenu } from "./algebra_util";
 import { assert, msg, MyError } from "@i18n";
 import { mathSelection, TexSelection, toTex } from "./tex";
