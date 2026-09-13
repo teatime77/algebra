@@ -1,5 +1,5 @@
 import { $, $div, assert, msg, MyError } from "@i18n";
-import { App, ConstNum, isUnicodeLetter, parseMath, RefVar, setIsProof, Term, texName } from "@parser";
+import { App, Binding, ConstNum, isUnicodeLetter, parseMath, RefVar, setIsProof, Term, texName } from "@parser";
 import katex from "katex";
 // KaTeX ships its stylesheet without TypeScript declarations.
 // @ts-ignore -- this is a runtime-only side-effect import.
@@ -671,6 +671,38 @@ function nodeId(term:Term) : string {
     return id;
 }
 
+function BindingToTex(bnd : Binding){
+    let body: string;
+    const args = bnd.args.map(x => toTex(x));
+
+    const varName = bnd.vars[0].name;
+    switch(bnd.fncName){
+    case "limit":
+        body =
+            `\\displaystyle ` +
+            `\\lim_{${varName} \\to ${args[1]}} ` +
+            `${args[0]}`;
+        break;
+
+    case "integrate":
+        body =
+            `\\displaystyle ` +
+            `\\int_{${args[1]}}` +
+            `^{${args[2]}} ` +
+            `${args[0]}` +
+            `\\,d${varName}`;
+        break;
+
+    case "diff":
+        body = `\\frac{d ${toTex(bnd.getArg(0))}}{d ${varName}}`;
+        break;
+    default:
+        throw new MyError();
+    }
+
+    return body;
+}
+
 export function toTex(term : Term) : string {
     let body: string;
 
@@ -679,6 +711,9 @@ export function toTex(term : Term) : string {
     }
     else if(term instanceof RefVar){
         body = ` ${term.name} `;
+    }
+    else if(term instanceof Binding){
+        body = BindingToTex(term);
     }
     else if(term instanceof App){
         if(term.fnc instanceof RefVar && term.args.length == 1 && term.args[0].isApp("[]")){

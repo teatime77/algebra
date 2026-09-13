@@ -1,8 +1,9 @@
 import { assert, msg, fetchText, MyError, $div } from "@i18n";
-import { RefVar, App, parseMath, Term, ConstNum, isLetter, Variable, Parser } from "@parser";
+import { RefVar, App, parseMath, Term, ConstNum, isLetter, Variable, Parser, Binding } from "@parser";
 import { allTerms, ProofStep, putStr, putTex, setHashTerm2 } from "./algebra_util.js";
 
 const sysVarNames : string[] = [
+    "∞",
     "π",
     "limit",
     "diff",
@@ -336,7 +337,19 @@ export class Theorem {
         const variables = this.varDecls.map(x => x.vars).flat().concat(sysVars);
         const all_refs = allTerms(root).filter(x => x instanceof RefVar && isLetter(x.name[0])) as RefVar[];
         for(const ref of all_refs){
-            ref.refVar = variables.find(x => x.name == ref.name);
+            
+            for(let app = ref.parent; app != null; app = app.parent){
+                if(app instanceof Binding){
+                    ref.refVar = app.vars.find(x => x.name == ref.name);
+                    if(ref.refVar != undefined){
+                        break;
+                    }
+                }
+            }
+            if(ref.refVar == undefined){
+
+                ref.refVar = variables.find(x => x.name == ref.name);
+            }
             if(ref.refVar == undefined){
 
                 msg(`ref-var:${ref.name} in [${root}]`);
