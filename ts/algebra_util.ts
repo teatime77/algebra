@@ -5,6 +5,7 @@ import katex from "katex";
 import { mathLib } from "./formula.js";
 import type { Formula, PredicateNode } from "./formula.js";
 import type { Proof } from "./proof.js";
+import { toTex } from "./tex.js";
 
 export function putStr(div:HTMLDivElement, s : string){
     const p = document.createElement("p");
@@ -16,7 +17,7 @@ export function putTex(div:HTMLDivElement, term : Term){
     const p = document.createElement("p");
     // p.innerHTML = `$$\n${term.tex()}\n$$`;
     div.appendChild(p);
-    renderKatexSub(p, term.tex());
+    renderKatexSub(p, toTex(term));
 }
 
 export function makeAdd(trms : Term[]) : App {
@@ -53,23 +54,6 @@ export function makeAccordion(parent:HTMLElement, title:string) : HTMLDivElement
     parent.appendChild(details);
 
     return content;
-}
-export function getAllTerms(t : Term, terms: Term[]){
-    terms.push(t);
-
-    if(t instanceof App){
-        assert(t.fnc != null, "get all terms");
-        getAllTerms(t.fnc, terms);
-
-        t.args.forEach(x => getAllTerms(x, terms));
-    }
-}
-
-export function allTerms(trm : Term) : Term[] {
-    const terms : Term[] = [];
-    getAllTerms(trm, terms);
-
-    return terms;
 }
 
 function fastHashToBigInt(str: string): bigint {
@@ -173,22 +157,6 @@ export function setHashTerm(positions : number[], term : Term) : bigint {
 }
 
 
-export function setHashTerm2(term : Term){   
-    const value_str = `${term.value}`;
-    let term_str : string = "";
-    
-    if(term instanceof RefVar){
-        term_str = term.name;
-    }
-    else if(term instanceof App){
-        term.args.forEach(x => setHashTerm2(x));
-        const args_str = term.args.map(x => x.hash2).join(",");
-        term_str = `${term.fncName}:[${args_str}]`;
-    }
-
-    term.hash2 = `<${term.constructor.name}:${value_str}:${term_str}>`;
-    term.hash = fastHashToBigInt(term.hash2);
-}
 
 function getTermByPointerEvent(map : Map<number,Term>, ev : PointerEvent) : Term {
     let target : HTMLElement = ev.target as HTMLElement;

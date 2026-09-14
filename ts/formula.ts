@@ -1,6 +1,5 @@
 import { assert, msg, fetchText, MyError, $div } from "@i18n";
 import { RefVar, App, parseMath, Term, isLetter, Variable, Binding } from "@parser";
-import { allTerms } from "./algebra_util.js";
 import { Proof } from "./proof.js";
 
 const sysVarNames : string[] = [
@@ -180,7 +179,7 @@ export class Theorem {
 
     setRefVars(root : Term){
         const variables = this.varDecls.map(x => x.vars).flat().concat(sysVars);
-        const all_refs = allTerms(root).filter(x => x instanceof RefVar && isLetter(x.name[0])) as RefVar[];
+        const all_refs = root.allTerms().filter(x => x instanceof RefVar && isLetter(x.name[0])) as RefVar[];
         for(const ref of all_refs){
             
             for(let app = ref.parent; app != null; app = app.parent){

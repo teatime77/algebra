@@ -3,7 +3,6 @@ import { initTexTest } from "./tex.js";
 import { testProof } from "./math_file_parser.js";
 import { msg, Speech } from "@i18n";
 import { simplify } from "./simplifier.js";
-import { saveData } from "./algebra_util.js";
 import { initSysVars } from "./formula.js";
 
 export { transpose, addEquations, divideEquation, substitute } from "./algebra.js";

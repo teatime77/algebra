@@ -1,10 +1,31 @@
-import { App, Term } from "@parser";
-import { Formula } from "./formula.js";
-import type { PredicateNode } from "./formula.js";
-import { SearchMatchFormula } from "./formula_matcher.js";
+import { App, ConstNum, Parser, RefVar, Term } from "@parser";
+import { Formula, mathLib } from "./formula.js";
+import type { PredicateNode, Theorem } from "./formula.js";
+import { matchFormula, SearchMatchFormula } from "./formula_matcher.js";
 import { FormulaMenuEntry, ProofStep, putStr, showFormulaMenu } from "./algebra_util";
 import { assert, msg, MyError } from "@i18n";
 import { mathSelection, TexSelection, toTex } from "./tex";
+
+function parthFormulaPath(formulaSsideId: string) : [Theorem, Formula, number] {
+    const items = formulaSsideId.split(".");
+    assert(items.length == 3 && items[0][0] == "#");
+    const [theoremId, tag, sideStr] = items;
+    const theorem = mathLib.theorems.get(theoremId.slice(1));
+    if(theorem == undefined){
+        throw new MyError();
+    }
+
+    const formula = theorem.getFormula(tag);
+    const predicate = formula.predicate
+    if(predicate == undefined){
+        throw new MyError();
+    }
+
+    const sideIdx = parseInt(sideStr) - 1;
+    assert(0 <= sideIdx && sideIdx <= predicate.args.length - 1);
+
+    return [theorem, formula, sideIdx];
+}
 
 function makeEqMenu(node:PredicateNode, eq : App) : FormulaMenuEntry[] {
     const items: FormulaMenuEntry[] = [];
@@ -138,6 +159,25 @@ export class CopySide extends ProofStep {
     sourceNode : PredicateNode;
     sideIdx : number;
 
+    static makeCopySide(sourceNode : PredicateNode, proofContent : HTMLDivElement, line: string) : CopySide{
+        const parser = new Parser(line.slice(1));
+        const terms:Term[] = [];
+        parser.readList(terms);
+        terms.forEach(x => x.setString());
+
+        assert(terms.length == 2);
+        assert(terms[0] instanceof ConstNum);
+        const [sideIdx, result] = terms as [ConstNum, Term];
+
+        const step = new CopySide(sourceNode, sideIdx.int() - 1);
+        if(`${step.result}` != `${result}`){
+            msg(`make-copy-side:[${line}][${step.result}][${result}]`)
+            throw new MyError();
+        }
+
+        return step;
+    }
+
     constructor(sourceNode : PredicateNode, sideIdx : number){
         super(sourceNode instanceof ProofStep ? sourceNode : undefined);
         this.sourceNode = sourceNode;
@@ -165,7 +205,7 @@ export class CopySide extends ProofStep {
     }
 
     toString() : string {
-        return `© ${this.sideIdx}, ${this.result}\n`;
+        return `© ${this.sideIdx + 1}, ${this.result}\n`;
     }
 }
 
@@ -174,7 +214,47 @@ export class Rewrite extends ProofStep {
     formula : Formula;
     sideIdx : number;
     predicate_cp : App;
-    sideIdx2 : number
+    sideIdx2 : number;
+
+    static makeRewrite(prevStep : ProofStep, proofContent : HTMLDivElement, line: string){
+        const parser = new Parser(line.slice(1));
+        const terms:Term[] = [];
+        parser.readList(terms);
+        terms.forEach(x => x.setString());
+        const s = terms.map(x => `${x}`).join(", ");
+        msg(`step-proof:${s}`);
+        assert(terms.length == 4);
+        assert(terms[1] instanceof RefVar && terms[2] instanceof ConstNum);
+        const targetTmp = terms[0];
+        const formulaSsideIdRef = terms[1] as RefVar;
+        const sideIdx2 = (terms[2] as ConstNum).int() - 1;
+        const result = terms[3];
+
+        assert(prevStep.result != undefined);
+        const targetTmpStr = `${targetTmp}`;
+        const targets = prevStep.result!.allTerms().filter(x => `${x}` == targetTmpStr);
+        if(targets.length != 1){
+            msg(`make-rewrite:[${targetTmpStr}]`);
+            prevStep.result!.allTerms().forEach(x => msg(`    [${x}]`));
+            throw new MyError();
+        }
+        const target = targets[0];
+
+        const [theorem, formula, sideIdx] = parthFormulaPath(formulaSsideIdRef.name);
+
+        const predicate_cp = matchFormula(target, theorem, formula, sideIdx);
+        if(predicate_cp == undefined){
+            throw new MyError();
+        }
+
+        const step = new Rewrite(prevStep, target, formula, sideIdx, predicate_cp, sideIdx2);
+        if(`${step.result}` != `${result}`){
+            msg(`make-rewrite2:[${line}][${step.result}][${result}]`)
+            throw new MyError();
+        }
+
+        return step;
+    }
 
     constructor(prevStep : ProofStep, target : Term, formula : Formula, sideIdx : number, predicate_cp : App, sideIdx2 : number){
         super(prevStep);
@@ -212,7 +292,7 @@ export class Rewrite extends ProofStep {
     }
 
     toString() : string {
-        return `@ ${this.target}, #${this.formula.theorem.name}.${this.formula.tag}.${this.sideIdx}, ${this.sideIdx2}, ${this.result} \n`;
+        return `@ ${this.target}, #${this.formula.theorem.name}.${this.formula.tag}.${this.sideIdx + 1}, ${this.sideIdx2 + 1}, ${this.result} \n`;
     }
 }
 

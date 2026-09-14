@@ -1,6 +1,5 @@
 import { Speech, sleep, assert, remove } from "@i18n";
 import { Term, App, ConstNum, renderKatexSub } from "@parser";
-import { allTerms } from "./algebra_util.js";
 
 async function sleepAlgebra(){
     await sleep(200);
@@ -11,7 +10,7 @@ async function sleepAlgebra(){
 */
 async function simplifyConstNumMultiplier(speech : Speech, ele : HTMLElement, root : Term){
     // 引数に定数を含む乗算のリスト
-    const const_muls = allTerms(root).filter(x => x.isMul() && (x as App).args.some(y => y instanceof ConstNum)) as App[];
+    const const_muls = root.allTerms().filter(x => x.isMul() && (x as App).args.some(y => y instanceof ConstNum)) as App[];
 
     while(const_muls.length != 0){
         // 引数に定数を含む乗算に対し
@@ -69,7 +68,7 @@ async function simplifyNestedAdd(add_child : App){
  */
 export async function simplifyNestedAddAll(speech : Speech, ele : HTMLElement, root : Term){
     // すべての加算のリスト
-    const add_terms = allTerms(root).filter(x => x.isAdd()) as App[];
+    const add_terms = root.allTerms().filter(x => x.isAdd()) as App[];
 
     while(add_terms.length != 0){
         // 未処理の加算がある場合
@@ -113,7 +112,7 @@ export async function simplifyNestedAddAll(speech : Speech, ele : HTMLElement, r
  */
 export async function simplifyCommonConstFactorInAdd(speech : Speech, ele : HTMLElement, root : Term){
     // すべての加算のリスト
-    const add_terms = allTerms(root).filter(x => x.isAdd()) as App[];
+    const add_terms = root.allTerms().filter(x => x.isAdd()) as App[];
 
     for(const add of add_terms){
         // 最初の項の係数
@@ -141,7 +140,7 @@ export async function simplifyCommonConstFactorInAdd(speech : Speech, ele : HTML
  */
 export async function combineLikeTerms(speech : Speech, ele : HTMLElement, root : Term) {
     // すべての加算のリスト
-    const add_terms = allTerms(root).filter(x => x.isAdd()) as App[];
+    const add_terms = root.allTerms().filter(x => x.isAdd()) as App[];
 
     while(add_terms.length != 0){
         // 未処理の加算がある場合
@@ -183,7 +182,7 @@ export async function combineLikeTerms(speech : Speech, ele : HTMLElement, root 
  */
 async function reduceFraction(speech : Speech, ele : HTMLElement, root : Term){
     // すべての除算のリスト
-    const div_terms = allTerms(root).filter(x => x.isDiv()) as App[];
+    const div_terms = root.allTerms().filter(x => x.isDiv()) as App[];
 
     while(div_terms.length != 0){
         // 未処理の除算がある場合

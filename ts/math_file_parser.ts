@@ -1,9 +1,9 @@
 import { $div, assert, fetchText, msg, MyError } from "@i18n";
 import { App, Parser, renderKatexSub, Term, Variable } from "@parser";
-import { Formula, mathLib, Theorem, VarDecl } from "./formula.js";
+import { Formula, mathLib, PredicateNode, Theorem, VarDecl } from "./formula.js";
 import type { Proof } from "./proof.js";
-import { DummyStep, FormulaMenuEntry, makeAccordion, putStr, putTex, saveData } from "./algebra_util";
-import { makeFormulaDiv } from "./ProofStep";
+import { DummyStep, FormulaMenuEntry, makeAccordion, ProofStep, putStr, putTex, saveData } from "./algebra_util";
+import { CopySide, makeFormulaDiv, Rewrite } from "./ProofStep";
 
 function splitKeyword(line : string) : [string, string] {
     const k = line.indexOf(" ");
@@ -77,9 +77,10 @@ export const formulaMenuItems: FormulaMenuEntry[] = [
 
 let comments : string[] = [];
 
-function readProof(lines:string[], proof : Proof){
-    const proofContent = makeAccordion(proof.formula.theorem.theoremDiv, `proof`);
+function readProof(formula : Formula, lines:string[], proof : Proof){
+    const proofContent : HTMLDivElement = makeAccordion(proof.formula.theorem.theoremDiv, `proof`);
 
+    let prevStep : ProofStep | undefined;
     while(lines.length != 0){
         const line = lines.shift()!;
         if(line == ""){
@@ -91,15 +92,37 @@ function readProof(lines:string[], proof : Proof){
         }
 
         const [keyword, name] = splitKeyword(line);
-        if(keyword == "@"){
-            // msg(`apply:[${line}]`)
+        switch(keyword){
+        case "@":
+            if(prevStep == undefined){
+                throw new MyError();
+            }
+            prevStep = Rewrite.makeRewrite(prevStep, proofContent!, line);
+            break;
 
-            proof.stepProof(proofContent!, line);
+        case "©":{
+            let sourceNode : PredicateNode;
+            if(prevStep == undefined){
+                sourceNode = formula;
+            }
+            else{
+                sourceNode = prevStep;
+            }
+
+            prevStep = CopySide.makeCopySide(sourceNode, proofContent!, line);
+            msg(`[${line}][${prevStep}]`);
+            break;
         }
-        else if(keyword == "qed"){
 
+        case "qed":
             return;
+
+        default:
+            throw new MyError();
         }
+
+        putStr(proofContent, line);
+        putTex(proofContent, prevStep.result!);
     }
 }
 
@@ -121,7 +144,7 @@ function readFormula(lines:string[], formula : Formula){
 
             putTex(formula.theorem.theoremDiv, formula.predicate);
 
-            readProof(lines, proof);
+            readProof(formula, lines, proof);
         }
         else{
             lines.unshift(line);

@@ -1,6 +1,5 @@
 import { assert, msg } from "@i18n";
 import { RefVar, App, Term, ConstNum, isLetter } from "@parser";
-import { allTerms } from "./algebra_util.js";
 import type { Formula, Theorem } from "./formula.js";
 import { mathLib } from "./formula.js";
 
@@ -137,7 +136,7 @@ function matchTerm(dic : Map<string, Term>, fdic : Map<string, [App, Term]>, foc
 }
 
 export function substByDic(dic : Map<string, Term>, fdic : Map<string, [App, Term]>, root : App){
-    const all_terms = allTerms(root);
+    const all_terms = root.allTerms();
 
     const apps = all_terms.filter(x => x instanceof App && fdic.has(x.fncName)) as App[];
     for(const trm2 of apps){
@@ -187,6 +186,7 @@ export function matchFormula(target : Term, theorem:Theorem, formula: Formula, s
                 matchTerm(dic, fdic, target, target, side_cp);
 
                 substByDic(dic, fdic, predicate_cp);
+                predicate_cp.setString();
 
                 msg(`form : OK ${target} F:${predicate_cp}`);
 
