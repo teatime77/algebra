@@ -707,7 +707,14 @@ export function toTex(term : Term) : string {
     let body: string;
 
     if(term instanceof ConstNum){
-        body = ` ${term.text} `;
+        if(term.value.denominator == 1){
+
+            body = ` ${term.value.numerator} `;
+        }
+        else{
+
+            body = ` \\frac{${term.value.numerator}}{${term.value.denominator}} `;
+        }
     }
     else if(term instanceof RefVar){
         body = ` ${term.name} `;

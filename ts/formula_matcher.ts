@@ -144,6 +144,7 @@ export function substByDic(dic : Map<string, Term>, fdic : Map<string, [App, Ter
         if(trm2.equal(trm2_cp)){
             // 公式側の関数呼び出しと一致する場合
 
+            assert(trm1_conv != undefined);
             trm2.replaceTerm(trm1_conv.clone());
         }
         else{
@@ -156,6 +157,7 @@ export function substByDic(dic : Map<string, Term>, fdic : Map<string, [App, Ter
 
     const refs = all_terms.filter(x => x instanceof RefVar && dic.has(x.name)) as RefVar[];
     for(const ref of refs){
+        assert(dic.get(ref.name) != undefined);
         const trm = dic.get(ref.name)!.clone();
 
         // 変換値に変数参照の係数をかける。
@@ -168,7 +170,7 @@ export function substByDic(dic : Map<string, Term>, fdic : Map<string, [App, Ter
 
 
 
-export function matchFormula(target : Term, theorem:Theorem, formula: Formula, sideIdx : number) : App | undefined {
+export function matchFormula(target : Term, theorem:Theorem, paramDic:Map<string, Term>, formula: Formula, sideIdx : number) : App | undefined {
     assert(formula.predicate.isEq());
     const side = formula.predicate.args[sideIdx];
     if(target instanceof App && side instanceof App){
@@ -176,12 +178,13 @@ export function matchFormula(target : Term, theorem:Theorem, formula: Formula, s
 
             const [predicate_cp, side_cp] = side.cloneRoot() as [App, App];
 
-            const dic = new Map<string, Term>();
+            const dic = new Map<string, Term>(paramDic);
             const fdic = new Map<string, [App, Term]>();
 
             for(const param of theorem.params()){
-                dic.set(param.name, param.init!);
+                assert(dic.get(param.name) != undefined);
             }
+
             try{
                 matchTerm(dic, fdic, target, target, side_cp);
 
@@ -211,11 +214,15 @@ export function SearchMatchFormula(target : Term) : [Formula, number, App][] {
     const formulaSideIdxes :[Formula, number, App][] = [];
 
     for(const [name, theorem] of mathLib.theorems.entries()){
+        const paramDic = new Map<string, Term>();
+        for(const param of theorem.params()){
+            paramDic.set(param.name, new RefVar("?"));
+        }
         for(const [id, formula] of theorem.formulas.entries()){
             if(formula.predicate.isEq()){
                 const eq = formula.predicate as App;
                 for(const [sideIdx, side] of eq.args.entries()){
-                    const predicate_cp = matchFormula(target, theorem, formula, sideIdx);
+                    const predicate_cp = matchFormula(target, theorem, paramDic, formula, sideIdx);
                     if(predicate_cp != undefined){
 
                         formulaSideIdxes.push([formula, sideIdx, predicate_cp]);

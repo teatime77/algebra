@@ -1,4 +1,4 @@
-import { App, ConstNum, Parser, RefVar, Term } from "@parser";
+import { App, ConstNum, parseMath, Parser, RefVar, Term } from "@parser";
 import { Formula, mathLib } from "./formula.js";
 import type { PredicateNode, Theorem } from "./formula.js";
 import { matchFormula, SearchMatchFormula } from "./formula_matcher.js";
@@ -242,7 +242,8 @@ export class Rewrite extends ProofStep {
 
         const [theorem, formula, sideIdx] = parthFormulaPath(formulaSsideIdRef.name);
 
-        const predicate_cp = matchFormula(target, theorem, formula, sideIdx);
+        const paramDic = new Map<string, Term>();
+        const predicate_cp = matchFormula(target, theorem, paramDic, formula, sideIdx);
         if(predicate_cp == undefined){
             throw new MyError();
         }
@@ -282,6 +283,22 @@ export class Rewrite extends ProofStep {
     applyProofStep() : void {
         if(this.prevStep == undefined || this.prevStep.proof == undefined){
             throw new MyError();
+        }
+        const params = this.formula.theorem.params();
+        if(params.length != 0){
+            assert(params.length == 1 && this.result != undefined);
+            const paramRefs = this.result!.allTerms().filter(x => x instanceof RefVar && x.name == "?");
+            if(paramRefs.length != 0){
+
+                const s = window.prompt("Input the expression");
+                if(s == null || s.trim() == ""){
+                    return;
+                }
+                const term = parseMath(s);
+                for(const refvar of paramRefs){
+                    refvar.replaceTerm(term.clone());
+                }
+            }
         }
         this.prevStep.proof.addProofStep(this);
         msg(`apply rewrite`);
