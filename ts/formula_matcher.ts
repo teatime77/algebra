@@ -1,5 +1,5 @@
-import { assert, msg } from "@i18n";
-import { RefVar, App, Term, ConstNum, isLetter } from "@parser";
+import { assert, msg, MyError } from "@i18n";
+import { RefVar, App, Term, ConstNum, isLetter, Variable } from "@parser";
 import type { Formula, Theorem } from "./formula.js";
 import { mathLib } from "./formula.js";
 
@@ -12,7 +12,7 @@ class FormulaError extends Error {
  * @param trm1 フォーカス側の項
  * @param trm2 公式側の項
  */
-function matchTerm(dic : Map<string, Term>, fdic : Map<string, [App, Term]>, focus: Term, trm1 : Term, trm2 : Term){
+function matchTerm(dic : Map<Variable, Term>, fdic : Map<string, [App, Term]>, focus: Term, trm1 : Term, trm2 : Term){
     if(trm2 instanceof RefVar){
         // 公式側が変数参照の場合
 
@@ -28,19 +28,23 @@ function matchTerm(dic : Map<string, Term>, fdic : Map<string, [App, Term]>, foc
         else{
             // 公式側が変数の場合
 
+            if(trm2.refVar == undefined){
+                throw new MyError();
+            }
+
             // 変換値
-            const conv = dic.get(trm2.name);
+            const conv = dic.get(trm2.refVar);
     
             if(conv == undefined){
                 // 変換値が未定の場合
     
                 // 新しい変換値をセットする。
-                const trm1_cp = trm1.clone();
+                const trm1_cp = trm1.clone2();
 
                 // 変換値を変数参照の係数で割る。
                 trm1_cp.value.setdiv(trm2.value);
 
-                dic.set(trm2.name, trm1_cp);
+                dic.set(trm2.refVar, trm1_cp);
             }
             else{
                 // 変換値が既定の場合
@@ -77,8 +81,8 @@ function matchTerm(dic : Map<string, Term>, fdic : Map<string, [App, Term]>, foc
                     // 変換値が未定の場合
         
                     // 新しい変換値をセットする。
-                    const trm1_cp = trm1.clone();
-                    fdic.set(trm2.fnc.name, [trm2.clone(), trm1_cp]);
+                    const trm1_cp = trm1.clone2();
+                    fdic.set(trm2.fnc.name, [trm2.clone2(), trm1_cp]);
                 }
                 else{
                     // 変換値が既定の場合
@@ -135,8 +139,8 @@ function matchTerm(dic : Map<string, Term>, fdic : Map<string, [App, Term]>, foc
     }
 }
 
-export function substByDic(dic : Map<string, Term>, fdic : Map<string, [App, Term]>, root : App){
-    const all_terms = root.allTerms();
+export function substByDic(dic : Map<Variable, Term>, fdic : Map<string, [App, Term]>, predicate_cp : App){
+    const all_terms = predicate_cp.allTerms();
 
     const apps = all_terms.filter(x => x instanceof App && fdic.has(x.fncName)) as App[];
     for(const trm2 of apps){
@@ -145,7 +149,7 @@ export function substByDic(dic : Map<string, Term>, fdic : Map<string, [App, Ter
             // 公式側の関数呼び出しと一致する場合
 
             assert(trm1_conv != undefined);
-            trm2.replaceTerm(trm1_conv.clone());
+            trm2.replaceTerm(trm1_conv.clone2());
         }
         else{
             // 公式側の関数呼び出し違う場合
@@ -155,41 +159,69 @@ export function substByDic(dic : Map<string, Term>, fdic : Map<string, [App, Ter
         }
     }
 
-    const refs = all_terms.filter(x => x instanceof RefVar && dic.has(x.name)) as RefVar[];
+    const refs = all_terms.filter(x => x instanceof RefVar && isLetter(x.name)) as RefVar[];
     for(const ref of refs){
-        assert(dic.get(ref.name) != undefined);
-        const trm = dic.get(ref.name)!.clone();
+        if(ref.refVar == undefined){
+            throw new MyError();
+        }
 
-        // 変換値に変数参照の係数をかける。
-        trm.value.setmul(ref.value);
+        if(dic.has(ref.refVar)){
 
-        // 変数参照を変換値で置き換える。
-        ref.replaceTerm(trm);
+            const trm = dic.get(ref.refVar)!.clone2();
+
+            // 変換値に変数参照の係数をかける。
+            trm.value.setmul(ref.value);
+
+            // 変数参照を変換値で置き換える。
+            ref.replaceTerm(trm);
+        }
     }
 }
 
+export function checkRefVar(term : Term){
+    let refs = term.allIdRefs().filter(x => x.refVar == undefined);
+    if(refs.length != 0){
+        term.setString();
+        msg(`ref-var err:[${term.cachedString}]`);
+        for(const r of refs){
+            msg(`    ref:${r.name}`);
+        }
+        throw new MyError();
+    }
+}
 
+export function matchFormula(target : Term, theorem:Theorem, paramDic:Map<Variable, Term>, formula: Formula, sideIdx : number) : App | undefined {
+    checkRefVar(target);
+    checkRefVar(formula.predicate);
 
-export function matchFormula(target : Term, theorem:Theorem, paramDic:Map<string, Term>, formula: Formula, sideIdx : number) : App | undefined {
     assert(formula.predicate.isEq());
     const side = formula.predicate.args[sideIdx];
     if(target instanceof App && side instanceof App){
         if(target.fncName == side.fncName && target.args.length == side.args.length){
 
             const [predicate_cp, side_cp] = side.cloneRoot() as [App, App];
+            formula.theorem.setRefVars(predicate_cp);
+            checkRefVar(predicate_cp)
 
-            const dic = new Map<string, Term>(paramDic);
+            const dic = new Map<Variable, Term>(paramDic);
             const fdic = new Map<string, [App, Term]>();
 
-            for(const param of theorem.params()){
-                assert(dic.get(param.name) != undefined);
-            }
+            Array.from(dic.values()).flat().forEach(x => checkRefVar(x));
 
             try{
                 matchTerm(dic, fdic, target, target, side_cp);
+                for(const [app,trm] of fdic.values()){
+                    checkRefVar(app);
+                    checkRefVar(trm);
+                }
 
+                Array.from(dic.values()).flat().forEach(x => checkRefVar(x));
+
+                checkRefVar(predicate_cp)
                 substByDic(dic, fdic, predicate_cp);
                 predicate_cp.setString();
+
+                checkRefVar(predicate_cp);
 
                 msg(`form : OK ${target} F:${predicate_cp}`);
 
@@ -214,10 +246,7 @@ export function SearchMatchFormula(target : Term) : [Formula, number, App][] {
     const formulaSideIdxes :[Formula, number, App][] = [];
 
     for(const [name, theorem] of mathLib.theorems.entries()){
-        const paramDic = new Map<string, Term>();
-        for(const param of theorem.params()){
-            paramDic.set(param.name, new RefVar("?"));
-        }
+        const paramDic = new Map<Variable, Term>();
         for(const [id, formula] of theorem.formulas.entries()){
             if(formula.predicate.isEq()){
                 const eq = formula.predicate as App;

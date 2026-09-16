@@ -1,5 +1,5 @@
-import { assert, msg, fetchText, MyError, $div } from "@i18n";
-import { RefVar, App, parseMath, Term, isLetter, Variable, Binding } from "@parser";
+import { assert, msg, MyError, $div } from "@i18n";
+import { RefVar, App, Term, isLetter, Variable, Binding } from "@parser";
 import { Proof } from "./proof.js";
 
 const sysVarNames : string[] = [
@@ -63,10 +63,6 @@ export class Formula implements PredicateNode {
         this.proofs.push(proof);
 
         return proof;
-    }
-
-    lastProof() : Proof {
-        return this.proofs.at(-1)!;
     }
 
     toString() : string {
@@ -179,6 +175,7 @@ export class Theorem {
 
     setRefVars(root : Term){
         const variables = this.varDecls.map(x => x.vars).flat().concat(sysVars);
+        const paramNames = this.params().map(x => x.name);
         const all_refs = root.allTerms().filter(x => x instanceof RefVar && isLetter(x.name[0])) as RefVar[];
         for(const ref of all_refs){
             
@@ -196,9 +193,9 @@ export class Theorem {
             }
             if(ref.refVar == undefined){
 
-                msg(`ref-var:${ref.name} in [${root}]`);
+                msg(`ref-var error:${ref.name} in [${root}]`);
+                throw new MyError();
             }
-            // assert(ref.refVar != undefined, `ref-var:${ref.name}`);
         }
     }
 }
@@ -220,63 +217,3 @@ export class MathLib {
 }
 
 export const mathLib = new MathLib();
-
-function actionRef(name : string) : RefVar {
-    return new RefVar(name);
-}
-
-class Index {
-    id       : number;
-    assertion : App;
-
-    constructor(id : number, assertion_str : string){
-        this.id = id;
-        this.assertion = parseMath(assertion_str) as App;
-    }
-}
-
-class TermSelection{
-    app : App;
-    start : number;
-    end   : number;
-
-    constructor(app : App, start : number, end   : number){
-        this.app   = app;
-        this.start = start;
-        this.end   = end;
-    }
-}
-
-let Indexes : Index[] = [];
-let curIndex : Index | undefined;
-
-async function readFormulas(){
-    Indexes = [];
-
-    const text = await fetchText(`../data/formulas.txt`);
-    const lines = text.split('\r\n').map(x => x.trim()).filter(x => x.length != 0);
-    for(const line of lines){
-        const i = line.indexOf(':');
-        const id = parseInt( line.substring(0, i).trim() )!;
-        const assertion_str = line.substring(i + 1).trim();
-
-        const index = new Index(id, assertion_str);
-        Indexes.push(index);
-    }
-}
-
-function enumFormulasForTermSelection(sel : TermSelection){
-
-}
-
-function enumFormulasForEquation(sel : TermSelection){
-
-}
-
-function enumFormulasForTerm(sel : TermSelection){
-
-}
-
-function enumFormulasForTerms(sel : TermSelection){
-
-}

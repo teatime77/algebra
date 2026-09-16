@@ -1,10 +1,12 @@
 import { $, $div, assert, msg, MyError } from "@i18n";
-import { App, Binding, ConstNum, isUnicodeLetter, parseMath, RefVar, setIsProof, Term, texName } from "@parser";
+import { App, Binding, ConstNum, isUnicodeLetter, RefVar, Term, texName } from "@parser";
 import katex from "katex";
 // KaTeX ships its stylesheet without TypeScript declarations.
 // @ts-ignore -- this is a runtime-only side-effect import.
 import "katex/dist/katex.min.css";
 import { assembleSupSub } from "katex/src/functions/utils/assembleSupSub.js";
+import { Formula, PredicateNode } from "./formula";
+import { ProofStep } from "./algebra_util";
 
 const nodeMap = new Map<string, Term>();
 
@@ -533,7 +535,18 @@ function showSelection(selection : MathSelection){
 export class TexSelection {
     mathContainer! : HTMLDivElement;
 
-    constructor(parent:HTMLElement, term:Term){
+    constructor(parent:HTMLElement, node : PredicateNode){        
+        let term:Term;
+        if(node instanceof Formula){
+            term = node.predicate;
+        }
+        else if(node instanceof ProofStep){
+            term = node.getResult();
+        }
+        else{
+            throw new MyError();
+        }
+
         const tex = toTex(term);
         this.mathContainer = document.createElement( "div" );
         this.mathContainer.className = "math-container";
@@ -865,22 +878,4 @@ export function initTexTest(){
     document.body.appendChild( selection_box);
 
     nodeMap.clear();
-
-    const s= `
-        limit(
-            integrate(
-                sqrt(1 + t^2) / (1 + t/(1+t*2+x)),
-                t, 0, 1
-            )
-            /
-            root(
-                (1 + x^2) / (1 + x),
-                3
-            )
-            , x, 0
-        )
-    `;
-    const term = parseMath(s.replaceAll("\n", " "));
-
-    new TexSelection($div("app"), term);
 }

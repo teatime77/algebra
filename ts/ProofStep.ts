@@ -1,10 +1,11 @@
-import { App, ConstNum, parseMath, Parser, RefVar, Term } from "@parser";
+import { App, ConstNum, parseMath, Parser, RefVar, Term, Variable } from "@parser";
 import { Formula, mathLib } from "./formula.js";
 import type { PredicateNode, Theorem } from "./formula.js";
-import { matchFormula, SearchMatchFormula } from "./formula_matcher.js";
+import { checkRefVar, matchFormula, SearchMatchFormula } from "./formula_matcher.js";
 import { FormulaMenuEntry, ProofStep, putStr, showFormulaMenu } from "./algebra_util";
-import { assert, msg, MyError } from "@i18n";
+import { assert, msg, MyError, range } from "@i18n";
 import { mathSelection, TexSelection, toTex } from "./tex";
+import { Str } from "../../parser/ts/parser.js";
 
 function parthFormulaPath(formulaSsideId: string) : [Theorem, Formula, number] {
     const items = formulaSsideId.split(".");
@@ -85,17 +86,32 @@ function makeProofStepMenu(step : ProofStep) : FormulaMenuEntry[] {
                 const formulaSideIdxes = SearchMatchFormula(mathSelection.selectedTerm);
                 for(const [formula, sideIdx, predicate_cp] of formulaSideIdxes){
                     assert(predicate_cp.isEq());
+                    checkRefVar(predicate_cp);
 
-                    for(const [sideIdx2, side2] of predicate_cp.args.entries()){
-                        if(sideIdx2 != sideIdx){
-                            const rewrite = new Rewrite(step, mathSelection.selectedTerm, formula, sideIdx, predicate_cp, sideIdx2);
-                            items.push({
-                                type:"action",
-                                step : rewrite,
-                                name : `${formula.theorem.name}.${formula.tag}`,
-                                latex: toTex(side2)
-                            })
+                    const otherSideIdxes = range(predicate_cp.args.length).filter(x => x != sideIdx);
+                    for(const sideIdx2 of otherSideIdxes){
+                        let side2 = predicate_cp.getArg(sideIdx2);
+                        const paramDic = new Map<Variable, Term>();
+                        const rewrite = new Rewrite(step, mathSelection.selectedTerm, formula, paramDic, sideIdx, predicate_cp, sideIdx2);
+                       
+                        const params = formula.theorem.params();
+                        if(params.length != 0){
+
+                            checkRefVar(side2);
+                            side2 = side2.clone2();
+                            checkRefVar(side2);
+                            const paramRefs = side2.allIdRefs().filter(x => params.includes(x.refVar!)) as RefVar[];
+                            if(paramRefs.length != 0){
+                                paramRefs.forEach(x => x.name = "?");
+                            }
                         }
+
+                        items.push({
+                            type:"action",
+                            step : rewrite,
+                            name : `${formula.theorem.name}.${formula.tag}`,
+                            latex: toTex(side2)
+                        })
                     }
                 }
             }
@@ -125,7 +141,7 @@ export function makeFormulaDiv(parent:HTMLDivElement, formula: Formula) : HTMLDi
 
     expressDiv.appendChild(btn);
 
-    new TexSelection(expressDiv, formula.predicate);
+    new TexSelection(expressDiv, formula);
 
     parent.appendChild(expressDiv);
 
@@ -148,7 +164,7 @@ export function makeProofStepDiv(parent:HTMLDivElement, step: ProofStep) : HTMLD
 
     step.nodeDiv.appendChild(btn);
 
-    new TexSelection(step.nodeDiv, step.getResult());
+    new TexSelection(step.nodeDiv, step);
 
     parent.appendChild(step.nodeDiv);
 
@@ -185,8 +201,10 @@ export class CopySide extends ProofStep {
 
         const eq = this.sourceNode.getResult() as App;
         assert(eq.isEq());
+        checkRefVar(eq);
 
-        this.result = eq.getArg(this.sideIdx).clone();
+        this.result = eq.getArg(this.sideIdx).clone2();
+        checkRefVar(this.result);
         this.result.setParent(null);
     }
 
@@ -215,22 +233,47 @@ export class Rewrite extends ProofStep {
     sideIdx : number;
     predicate_cp : App;
     sideIdx2 : number;
+    paramDic : Map<Variable, Term>;
 
-    static makeRewrite(prevStep : ProofStep, proofContent : HTMLDivElement, line: string){
+    static makeRewrite(parentFormula : Formula, prevStep : ProofStep, proofContent : HTMLDivElement, line: string){
+        assert(prevStep.result != undefined);
+        checkRefVar(prevStep.result!);
+
         const parser = new Parser(line.slice(1));
         const terms:Term[] = [];
         parser.readList(terms);
         terms.forEach(x => x.setString());
         const s = terms.map(x => `${x}`).join(", ");
         msg(`step-proof:${s}`);
-        assert(terms.length == 4);
-        assert(terms[1] instanceof RefVar && terms[2] instanceof ConstNum);
+        assert(terms.length == 4 || terms.length == 5);
+        assert(terms[1] instanceof RefVar);
         const targetTmp = terms[0];
         const formulaSsideIdRef = terms[1] as RefVar;
+        const [theorem, formula, sideIdx] = parthFormulaPath(formulaSsideIdRef.name);
+
+        const paramDic = new Map<Variable, Term>();
+        if(terms.length == 5){            
+            const paramVals = terms[2] as App;
+            terms.splice(2, 1);
+
+            parentFormula.theorem.setRefVars(paramVals);
+            checkRefVar(paramVals);
+
+            assert(paramVals instanceof App && paramVals.fncName == "[]" && paramVals.args.length == 1);
+            const nameTerm = paramVals.getArg(0) as App;
+            assert(nameTerm instanceof App && nameTerm.fncName == "[]" && nameTerm.args.length == 2);
+            const [name, term] = nameTerm.args as [Str, Term];
+            assert(name instanceof Str);
+            const param = theorem.params().find(x => x.name == name.text)!;
+            assert(param != undefined);
+            msg(`param-name:[${param.name}][${term}]`);
+            paramDic.set(param, term);
+        }
+
+        assert(terms[2] instanceof ConstNum);
         const sideIdx2 = (terms[2] as ConstNum).int() - 1;
         const result = terms[3];
 
-        assert(prevStep.result != undefined);
         const targetTmpStr = `${targetTmp}`;
         const targets = prevStep.result!.allTerms().filter(x => `${x}` == targetTmpStr);
         if(targets.length != 1){
@@ -240,15 +283,13 @@ export class Rewrite extends ProofStep {
         }
         const target = targets[0];
 
-        const [theorem, formula, sideIdx] = parthFormulaPath(formulaSsideIdRef.name);
-
-        const paramDic = new Map<string, Term>();
         const predicate_cp = matchFormula(target, theorem, paramDic, formula, sideIdx);
         if(predicate_cp == undefined){
             throw new MyError();
         }
+        parentFormula.theorem.setRefVars(predicate_cp);
 
-        const step = new Rewrite(prevStep, target, formula, sideIdx, predicate_cp, sideIdx2);
+        const step = new Rewrite(prevStep, target, formula, paramDic, sideIdx, predicate_cp, sideIdx2);
         if(`${step.result}` != `${result}`){
             msg(`make-rewrite2:[${line}][${step.result}][${result}]`)
             throw new MyError();
@@ -257,17 +298,19 @@ export class Rewrite extends ProofStep {
         return step;
     }
 
-    constructor(prevStep : ProofStep, target : Term, formula : Formula, sideIdx : number, predicate_cp : App, sideIdx2 : number){
+    constructor(prevStep : ProofStep, target : Term, formula : Formula, paramDic : Map<Variable, Term>, sideIdx : number, predicate_cp : App, sideIdx2 : number){
         super(prevStep);
         this.target = target;
         this.formula = formula;
+        this.paramDic = paramDic;
         this.sideIdx = sideIdx;
 
         this.predicate_cp = predicate_cp;
         this.sideIdx2 = sideIdx2;
 
         const [target_root_cp, target_cp] = this.target.cloneRoot();
-        const side2 = this.predicate_cp.getArg(this.sideIdx2).clone();
+        
+        const side2 = this.predicate_cp.getArg(this.sideIdx2).clone2();
         if(target_root_cp == target_cp){
             this.result = side2;
         }
@@ -287,7 +330,7 @@ export class Rewrite extends ProofStep {
         const params = this.formula.theorem.params();
         if(params.length != 0){
             assert(params.length == 1 && this.result != undefined);
-            const paramRefs = this.result!.allTerms().filter(x => x instanceof RefVar && x.name == "?");
+            const paramRefs = this.result!.allTerms().filter(x => x instanceof RefVar && params.includes(x.refVar!));
             if(paramRefs.length != 0){
 
                 const s = window.prompt("Input the expression");
@@ -309,21 +352,14 @@ export class Rewrite extends ProofStep {
     }
 
     toString() : string {
-        return `@ ${this.target}, #${this.formula.theorem.name}.${this.formula.tag}.${this.sideIdx + 1}, ${this.sideIdx2 + 1}, ${this.result} \n`;
+        if(this.paramDic.size != 0){
+            const paramStr = "[" + Array.from(this.paramDic.entries()).map(([name,x],i) => `["${name}", ${x}]`).join(", ") + "]";
+            return `@ ${this.target}, #${this.formula.theorem.name}.${this.formula.tag}.${this.sideIdx + 1}, ${paramStr}, ${this.sideIdx2 + 1}, ${this.result} \n`;
+        }
+        else{
+
+            return `@ ${this.target}, #${this.formula.theorem.name}.${this.formula.tag}.${this.sideIdx + 1}, ${this.sideIdx2 + 1}, ${this.result} \n`;
+        }
     }
 }
 
-/*
-class AddBothSides extends ProofStep {
-}
-
-class MultiplyBothSides extends ProofStep {
-}
-
-class AddPlusMinusZero extends ProofStep {
-}
-
-
-class MultiplyFractionOne extends ProofStep {
-}
-*/

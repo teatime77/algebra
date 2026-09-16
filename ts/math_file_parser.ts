@@ -1,9 +1,10 @@
 import { $div, assert, fetchText, msg, MyError } from "@i18n";
-import { App, Parser, renderKatexSub, Term, Variable } from "@parser";
+import { App, parseMath, Parser, renderKatexSub, Term, Variable } from "@parser";
 import { Formula, mathLib, PredicateNode, Theorem, VarDecl } from "./formula.js";
 import type { Proof } from "./proof.js";
 import { DummyStep, FormulaMenuEntry, makeAccordion, ProofStep, putStr, putTex, saveData } from "./algebra_util";
 import { CopySide, makeFormulaDiv, Rewrite } from "./ProofStep";
+import { TexSelection } from "./tex.js";
 
 function splitKeyword(line : string) : [string, string] {
     const k = line.indexOf(" ");
@@ -14,18 +15,6 @@ function splitKeyword(line : string) : [string, string] {
     const data = line.slice(k + 1).trim();
 
     return [keyword, data];
-}
-
-function parseExpression(data:string) : App {
-    const parser = new Parser(data);
-    const term = parser.RootExpression();
-    if(!(term instanceof App)){
-        throw new MyError();
-    }
-
-    msg(`expr:[${term}]`);
-
-    return term;
 }
 
 export const formulaMenuItems: FormulaMenuEntry[] = [
@@ -97,7 +86,7 @@ function readProof(formula : Formula, lines:string[], proof : Proof){
             if(prevStep == undefined){
                 throw new MyError();
             }
-            prevStep = Rewrite.makeRewrite(prevStep, proofContent!, line);
+            prevStep = Rewrite.makeRewrite(formula, prevStep, proofContent!, line);
             break;
 
         case "©":{
@@ -122,7 +111,7 @@ function readProof(formula : Formula, lines:string[], proof : Proof){
         }
 
         putStr(proofContent, line);
-        putTex(proofContent, prevStep.result!);
+        new TexSelection(proofContent, prevStep);
     }
 }
 
@@ -212,7 +201,7 @@ function readTheorem(lines:string[], theorem : Theorem){
             return;
         }
         else{
-            const predicate = parseExpression(line);
+            const predicate = parseMath(line) as App;
 
             const formulaDiv = document.createElement("div");
             const formula = new Formula(theorem, predicate, formulaDiv);
