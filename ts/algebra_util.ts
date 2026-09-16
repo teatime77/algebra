@@ -1,11 +1,11 @@
-import { assert, MyError } from "@i18n";
+import { $div, assert, MyError } from "@i18n";
 import { App, ConstNum, operator, Rational, RefVar, renderKatexSub, Term } from "@parser";
 
 import katex from "katex";
 import { mathLib } from "./formula.js";
 import type { Formula, PredicateNode } from "./formula.js";
 import type { Proof } from "./proof.js";
-import { toTex } from "./tex.js";
+import { clearHighlight, toTex } from "./tex.js";
 
 export function putStr(div:HTMLDivElement, s : string){
     const p = document.createElement("p");
@@ -228,11 +228,7 @@ export type FormulaMenuEntry =
     | FormulaAction
     | FormulaSubmenu;
 
-export function showFormulaMenu(formula: Formula, 
-    items: FormulaMenuEntry[],
-    x: number,
-    y: number
-): void {
+export function showFormulaMenu(formula: Formula, items: FormulaMenuEntry[], x: number, y: number): void {
     document.querySelector(".formula-popup-menu")?.remove();
 
     const root_menu = createMenu(items);
@@ -245,9 +241,7 @@ export function showFormulaMenu(formula: Formula,
 
     adjustPosition(root_menu);
 
-    function createMenu(
-        menu_items: FormulaMenuEntry[],
-    ): HTMLDivElement {
+    function createMenu(menu_items: FormulaMenuEntry[]): HTMLDivElement {
         const menu = document.createElement("div");
         menu.className = "formula-menu";
 
@@ -261,7 +255,6 @@ export function showFormulaMenu(formula: Formula,
 
         return menu;
     }
-
 
     function createAction(formula: Formula, item: FormulaAction): HTMLButtonElement {
         const button = document.createElement("button");
@@ -292,10 +285,7 @@ export function showFormulaMenu(formula: Formula,
         return button;
     }
 
-
-    function createSubmenu(
-        item: FormulaSubmenu,
-    ): HTMLDivElement {
+    function createSubmenu(item: FormulaSubmenu): HTMLDivElement {
         const container = document.createElement("div");
         container.className = "formula-submenu-container";
 
@@ -322,10 +312,7 @@ export function showFormulaMenu(formula: Formula,
         return container;
     }
 
-
-    function adjustPosition(
-        menu: HTMLElement,
-    ): void {
+    function adjustPosition(menu: HTMLElement): void {
         const rect = menu.getBoundingClientRect();
 
         if (rect.right > window.innerWidth) {
@@ -339,50 +326,30 @@ export function showFormulaMenu(formula: Formula,
         }
     }
 
-
     function close(): void {
         root_menu.remove();
 
-        document.removeEventListener(
-            "pointerdown",
-            handleOutsideClick,
-        );
+        document.removeEventListener("pointerdown", handleOutsideClick);
+        document.removeEventListener("keydown"    ,handleKeyDown);
 
-        document.removeEventListener(
-            "keydown",
-            handleKeyDown,
-        );
+        clearHighlight($div("formula-book"));
     }
 
-
-    function handleOutsideClick(
-        event: PointerEvent,
-    ): void {
+    function handleOutsideClick(event: PointerEvent): void {
         if (!root_menu.contains(event.target as Node)) {
             close();
         }
     }
 
-
-    function handleKeyDown(
-        event: KeyboardEvent,
-    ): void {
+    function handleKeyDown(event: KeyboardEvent): void {
         if (event.key === "Escape") {
             close();
         }
     }
 
-
     setTimeout(() => {
-        document.addEventListener(
-            "pointerdown",
-            handleOutsideClick,
-        );
-
-        document.addEventListener(
-            "keydown",
-            handleKeyDown,
-        );
+        document.addEventListener("pointerdown", handleOutsideClick);
+        document.addEventListener("keydown"    ,handleKeyDown);
     });
 }
 

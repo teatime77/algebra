@@ -1,12 +1,12 @@
-import { $, $div, assert, msg, MyError } from "@i18n";
-import { App, Binding, ConstNum, isUnicodeLetter, RefVar, Term, texName } from "@parser";
+import { $div, assert, msg, MyError } from "@i18n";
+import { App, Binding, ConstNum, isUnicodeLetter, RefVar, Term } from "@parser";
 import katex from "katex";
 // KaTeX ships its stylesheet without TypeScript declarations.
 // @ts-ignore -- this is a runtime-only side-effect import.
 import "katex/dist/katex.min.css";
-import { assembleSupSub } from "katex/src/functions/utils/assembleSupSub.js";
 import { Formula, PredicateNode } from "./formula";
-import { ProofStep } from "./algebra_util";
+import { ProofStep, showFormulaMenu } from "./algebra_util";
+import { makeFormulaMenu, makeProofStepMenu } from "./ProofStep";
 
 const nodeMap = new Map<string, Term>();
 
@@ -403,7 +403,7 @@ function findAstElement( container: HTMLElement, ast_id: string): HTMLElement | 
  * ============================================================
  */
 
-function clearHighlight( container: HTMLElement): void {
+export function clearHighlight( container: HTMLElement): void {
     container.querySelectorAll( 
             ".ast-selected" 
         )
@@ -506,7 +506,7 @@ function showSelectionBox( rect: DOMRect): void {
     selection_box.style.height = `${rect.height}px`;
 }
 
-function hideSelectionBox(): void {
+export function hideSelectionBox(): void {
     selection_box.style.display = "none";
 }
 
@@ -533,9 +533,12 @@ function showSelection(selection : MathSelection){
 }
 
 export class TexSelection {
+    node : PredicateNode;
     mathContainer! : HTMLDivElement;
 
     constructor(parent:HTMLElement, node : PredicateNode){        
+        this.node = node;
+
         let term:Term;
         if(node instanceof Formula){
             term = node.predicate;
@@ -567,6 +570,7 @@ export class TexSelection {
         this.mathContainer.addEventListener("pointermove", this.onPointerMove.bind(this));
         this.mathContainer.addEventListener("pointerup", this.onPointerUp.bind(this));
         this.mathContainer.addEventListener("pointercancel", this.onPointerCancel.bind(this));
+        this.mathContainer.addEventListener("contextmenu", this.onContextmenu.bind(this));
     }
 
     /*
@@ -598,11 +602,12 @@ export class TexSelection {
     }
 
     onPointerDown(event : PointerEvent){
-        mathSelection = undefined;
+        msg(`down:${event.button}`);
 
         if (event.button !== 0) {
             return;
         }
+        mathSelection = undefined;
 
         event.preventDefault();
 
@@ -633,6 +638,7 @@ export class TexSelection {
     }
 
     onPointerMove(event : PointerEvent){
+        // msg(`move:${event.button}`);
         if (!dragging || event.pointerId !== pointer_id) {
             return;
         }
@@ -641,6 +647,10 @@ export class TexSelection {
     }
 
     onPointerUp(event : PointerEvent){
+        msg(`up:${event.button}`);
+        if(event.button == 2){
+            return;
+        }
         clearHighlight(this.mathContainer);
 
         if ( !dragging || event.pointerId !== pointer_id) { 
@@ -674,6 +684,26 @@ export class TexSelection {
         pointer_id = null;
 
         hideSelectionBox();
+    }
+
+    onContextmenu(event : PointerEvent){
+        msg(`menu:${event.button}`);
+        event.preventDefault();
+        if(this.node instanceof Formula){
+            showFormulaMenu(this.node,
+                makeFormulaMenu(this.node),
+                event.clientX, event.clientY
+            );
+        }
+        else if(this.node instanceof ProofStep){
+            showFormulaMenu(this.node.proof!.formula,
+                makeProofStepMenu(this.node),
+                event.clientX, event.clientY
+            );
+        }
+        else{
+            throw new MyError();
+        }
     }
 }
 

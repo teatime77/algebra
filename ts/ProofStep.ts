@@ -2,7 +2,7 @@ import { App, ConstNum, parseMath, Parser, RefVar, Term, Variable } from "@parse
 import { Formula, mathLib } from "./formula.js";
 import type { PredicateNode, Theorem } from "./formula.js";
 import { checkRefVar, matchFormula, SearchMatchFormula } from "./formula_matcher.js";
-import { FormulaMenuEntry, ProofStep, putStr, showFormulaMenu } from "./algebra_util";
+import { FormulaMenuEntry, ProofStep, putStr } from "./algebra_util";
 import { assert, msg, MyError, range } from "@i18n";
 import { mathSelection, TexSelection, toTex } from "./tex";
 import { Str } from "../../parser/ts/parser.js";
@@ -57,7 +57,7 @@ function makeEqMenu(node:PredicateNode, eq : App) : FormulaMenuEntry[] {
     return items;
 }
 
-function makeFormulaMenu(formula : Formula) : FormulaMenuEntry[] {
+export function makeFormulaMenu(formula : Formula) : FormulaMenuEntry[] {
     const items: FormulaMenuEntry[] = [];
 
     if(formula.predicate.isEq()){
@@ -72,7 +72,7 @@ function makeFormulaMenu(formula : Formula) : FormulaMenuEntry[] {
     return items;
 }
 
-function makeProofStepMenu(step : ProofStep) : FormulaMenuEntry[] {
+export function makeProofStepMenu(step : ProofStep) : FormulaMenuEntry[] {
     const items: FormulaMenuEntry[] = [];
 
     if(step.getResult() instanceof App){
@@ -82,8 +82,16 @@ function makeProofStepMenu(step : ProofStep) : FormulaMenuEntry[] {
             return makeEqMenu(step, app)
         }
         else{
-            if(mathSelection != undefined && mathSelection.kind == "node"){
-                const formulaSideIdxes = SearchMatchFormula(mathSelection.selectedTerm);
+            let selectedTerm : Term | undefined;
+            if(mathSelection == undefined){
+                selectedTerm = app;
+            }
+            else if(mathSelection != undefined && mathSelection.kind == "node"){
+                selectedTerm = mathSelection.selectedTerm;
+            }
+
+            if(selectedTerm != undefined){
+                const formulaSideIdxes = SearchMatchFormula(selectedTerm);
                 for(const [formula, sideIdx, predicate_cp] of formulaSideIdxes){
                     assert(predicate_cp.isEq());
                     checkRefVar(predicate_cp);
@@ -92,7 +100,7 @@ function makeProofStepMenu(step : ProofStep) : FormulaMenuEntry[] {
                     for(const sideIdx2 of otherSideIdxes){
                         let side2 = predicate_cp.getArg(sideIdx2);
                         const paramDic = new Map<Variable, Term>();
-                        const rewrite = new Rewrite(step, mathSelection.selectedTerm, formula, paramDic, sideIdx, predicate_cp, sideIdx2);
+                        const rewrite = new Rewrite(step, selectedTerm, formula, paramDic, sideIdx, predicate_cp, sideIdx2);
                        
                         const params = formula.theorem.params();
                         if(params.length != 0){
@@ -128,19 +136,6 @@ export function makeFormulaDiv(parent:HTMLDivElement, formula: Formula) : HTMLDi
         putStr(expressDiv, formula.tag);
     }
 
-    const btn = document.createElement("button");
-    btn.textContent = "...";
-    btn.addEventListener("click", (event:PointerEvent)=>{
-
-        showFormulaMenu(formula,
-            makeFormulaMenu(formula),
-            event.clientX,
-            event.clientY
-        );
-    });
-
-    expressDiv.appendChild(btn);
-
     new TexSelection(expressDiv, formula);
 
     parent.appendChild(expressDiv);
@@ -150,19 +145,6 @@ export function makeFormulaDiv(parent:HTMLDivElement, formula: Formula) : HTMLDi
 
 export function makeProofStepDiv(parent:HTMLDivElement, step: ProofStep) : HTMLDivElement {
     step.nodeDiv = document.createElement("div");
-
-    const btn = document.createElement("button");
-    btn.textContent = "...";
-    btn.addEventListener("click", (event:PointerEvent)=>{
-
-        showFormulaMenu(step.proof!.formula,
-            makeProofStepMenu(step),
-            event.clientX,
-            event.clientY
-        );
-    });
-
-    step.nodeDiv.appendChild(btn);
 
     new TexSelection(step.nodeDiv, step);
 
