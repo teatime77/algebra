@@ -1,10 +1,9 @@
-import { $div, assert, fetchText, msg, MyError } from "@i18n";
-import { App, parseMath, Parser, renderKatexSub, Term, Variable } from "@parser";
+import { assert, fetchText, msg, MyError } from "@i18n";
+import { App, parseMath, Parser, Term, Variable } from "@parser";
 import { Formula, mathLib, PredicateNode, Theorem, VarDecl } from "./formula.js";
 import type { Proof } from "./proof.js";
-import { DummyStep, FormulaMenuEntry, makeAccordion, ProofStep, putStr, putTex, saveData } from "./algebra_util";
+import { DummyStep, FormulaMenuEntry, ProofStep, putTex, saveData } from "./algebra_util";
 import { CopySide, makeFormulaDiv, Rewrite } from "./ProofStep";
-import { TexSelection } from "./tex.js";
 
 function splitKeyword(line : string) : [string, string] {
     const k = line.indexOf(" ");
@@ -67,8 +66,6 @@ export const formulaMenuItems: FormulaMenuEntry[] = [
 let comments : string[] = [];
 
 function readProof(formula : Formula, lines:string[], proof : Proof){
-    const proofContent : HTMLDivElement = makeAccordion(proof.formula.theorem.theoremDiv, `proof`);
-
     let prevStep : ProofStep | undefined;
     while(lines.length != 0){
         const line = lines.shift()!;
@@ -86,7 +83,7 @@ function readProof(formula : Formula, lines:string[], proof : Proof){
             if(prevStep == undefined){
                 throw new MyError();
             }
-            prevStep = Rewrite.makeRewrite(formula, prevStep, proofContent!, line);
+            prevStep = Rewrite.makeRewrite(formula, prevStep, line);
             break;
 
         case "©":{
@@ -98,7 +95,7 @@ function readProof(formula : Formula, lines:string[], proof : Proof){
                 sourceNode = prevStep;
             }
 
-            prevStep = CopySide.makeCopySide(sourceNode, proofContent!, line);
+            prevStep = CopySide.makeCopySide(sourceNode, line);
             msg(`[${line}][${prevStep}]`);
             break;
         }
@@ -109,9 +106,7 @@ function readProof(formula : Formula, lines:string[], proof : Proof){
         default:
             throw new MyError();
         }
-
-        putStr(proofContent, line);
-        new TexSelection(proofContent, prevStep);
+        prevStep.applyProofStep();
     }
 }
 
@@ -259,16 +254,9 @@ export function parseMathFile(text: string) {
 
 export async function testProof(){
     const text = await fetchText("./formula/example.math");
-    // msg(`proof:[${text}]`);
     parseMathFile(text);
 
     await saveData("output.math", mathLib.toString());
-
-
-    // const text2 = await fetchText("./output/output.math");
-    // console.log(text2);
-    // parseMathFile(text2);
-    // await saveData("output2.math", mathLib.toString());
 
     return true;
 }

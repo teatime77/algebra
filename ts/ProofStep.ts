@@ -144,20 +144,20 @@ export function makeFormulaDiv(parent:HTMLDivElement, formula: Formula) : HTMLDi
 }
 
 export function makeProofStepDiv(parent:HTMLDivElement, step: ProofStep) : HTMLDivElement {
-    step.nodeDiv = document.createElement("div");
+    step.stepDiv = document.createElement("div");
 
-    new TexSelection(step.nodeDiv, step);
+    new TexSelection(step.stepDiv, step);
 
-    parent.appendChild(step.nodeDiv);
+    parent.appendChild(step.stepDiv);
 
-    return step.nodeDiv
+    return step.stepDiv
 }
 
 export class CopySide extends ProofStep {
     sourceNode : PredicateNode;
     sideIdx : number;
 
-    static makeCopySide(sourceNode : PredicateNode, proofContent : HTMLDivElement, line: string) : CopySide{
+    static makeCopySide(sourceNode : PredicateNode, line: string) : CopySide{
         const parser = new Parser(line.slice(1));
         const terms:Term[] = [];
         parser.readList(terms);
@@ -191,13 +191,13 @@ export class CopySide extends ProofStep {
     }
 
     applyProofStep() : void {
-        msg(`apply-copy-side:${this.sourceNode.nodeDiv.tagName}`);
+        msg(`apply-copy-side:${this.sourceNode.getNodeDiv().tagName}`);
 
         if(this.sourceNode instanceof Formula){
-            const proof = this.sourceNode.addProof();
+            const proof = this.sourceNode.startProof();
             proof.addProofStep(this);
 
-            const parentDiv = this.sourceNode.nodeDiv;
+            const parentDiv = proof.proofContent;
             putStr(parentDiv, "start proof");
 
             makeProofStepDiv(parentDiv, this);
@@ -217,7 +217,7 @@ export class Rewrite extends ProofStep {
     sideIdx2 : number;
     paramDic : Map<Variable, Term>;
 
-    static makeRewrite(parentFormula : Formula, prevStep : ProofStep, proofContent : HTMLDivElement, line: string){
+    static makeRewrite(parentFormula : Formula, prevStep : ProofStep, line: string){
         assert(prevStep.result != undefined);
         checkRefVar(prevStep.result!);
 
@@ -256,8 +256,8 @@ export class Rewrite extends ProofStep {
         const sideIdx2 = (terms[2] as ConstNum).int() - 1;
         const result = terms[3];
 
-        const targetTmpStr = `${targetTmp}`;
-        const targets = prevStep.result!.allTerms().filter(x => `${x}` == targetTmpStr);
+        const targetTmpStr = targetTmp.strid();
+        const targets = prevStep.result!.allTerms().filter(x => x.strid() == targetTmpStr);
         if(targets.length != 1){
             msg(`make-rewrite:[${targetTmpStr}]`);
             prevStep.result!.allTerms().forEach(x => msg(`    [${x}]`));
@@ -328,14 +328,12 @@ export class Rewrite extends ProofStep {
         this.prevStep.proof.addProofStep(this);
         msg(`apply rewrite`);
 
-        const parentDiv = this.prevStep!.nodeDiv;
-
-        makeProofStepDiv(parentDiv, this);
+        makeProofStepDiv(this.prevStep.proof.proofContent, this);
     }
 
     toString() : string {
         if(this.paramDic.size != 0){
-            const paramStr = "[" + Array.from(this.paramDic.entries()).map(([name,x],i) => `["${name}", ${x}]`).join(", ") + "]";
+            const paramStr = "[" + Array.from(this.paramDic.entries()).map(([va,x],i) => `["${va.name}", ${x}]`).join(", ") + "]";
             return `@ ${this.target}, #${this.formula.theorem.name}.${this.formula.tag}.${this.sideIdx + 1}, ${paramStr}, ${this.sideIdx2 + 1}, ${this.result} \n`;
         }
         else{

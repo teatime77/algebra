@@ -23,7 +23,7 @@ export function initSysVars(){
 
 export interface PredicateNode {
     getResult() : Term;
-    nodeDiv : HTMLDivElement;
+    getNodeDiv() : HTMLDivElement;
 }
 
 export class Formula implements PredicateNode {
@@ -33,29 +33,26 @@ export class Formula implements PredicateNode {
     tag : string;
     predicate : App;
     proofs : Proof[] = [];
-    nodeDiv : HTMLDivElement;
+    formulaDiv : HTMLDivElement;
     str : string;
 
     constructor(theorem : Theorem, predicate : App, formulaDiv : HTMLDivElement){
         this.idx = Formula.formulaIdx++;
         this.theorem = theorem;
         this.predicate = predicate;
-        this.nodeDiv = formulaDiv;
+        this.formulaDiv = formulaDiv;
         this.str = `${predicate}`;
         this.tag = `${theorem.formulas.size + 1}`;
 
         theorem.setRefVars(predicate);
     }
 
-    getResult() : Term {
-        return this.predicate;
+    getNodeDiv() : HTMLDivElement {
+        return this.formulaDiv;
     }
 
-    addProof() : Proof {
-        const proof = new Proof(this);
-        this.proofs.push(proof);
-
-        return proof;
+    getResult() : Term {
+        return this.predicate;
     }
 
     startProof() : Proof {

@@ -690,13 +690,13 @@ export class TexSelection {
         msg(`menu:${event.button}`);
         event.preventDefault();
         if(this.node instanceof Formula){
-            showFormulaMenu(this.node,
+            showFormulaMenu(
                 makeFormulaMenu(this.node),
                 event.clientX, event.clientY
             );
         }
         else if(this.node instanceof ProofStep){
-            showFormulaMenu(this.node.proof!.formula,
+            showFormulaMenu(
                 makeProofStepMenu(this.node),
                 event.clientX, event.clientY
             );

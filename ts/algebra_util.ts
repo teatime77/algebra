@@ -1,9 +1,8 @@
 import { $div, assert, MyError } from "@i18n";
 import { App, ConstNum, operator, Rational, RefVar, renderKatexSub, Term } from "@parser";
 
-import katex from "katex";
 import { mathLib } from "./formula.js";
-import type { Formula, PredicateNode } from "./formula.js";
+import type { PredicateNode } from "./formula.js";
 import type { Proof } from "./proof.js";
 import { clearHighlight, toTex } from "./tex.js";
 
@@ -176,12 +175,17 @@ function getTermByPointerEvent(map : Map<number,Term>, ev : PointerEvent) : Term
 
 export abstract class ProofStep implements PredicateNode {
     proof! : Proof;
-    nodeDiv! : HTMLDivElement;
+    stepDiv! : HTMLDivElement;
     prevStep : ProofStep | undefined;
     result : Term | undefined;
 
     constructor(prevStep : ProofStep | undefined){
         this.prevStep = prevStep;
+    }
+
+    getNodeDiv() : HTMLDivElement {
+        assert(this.stepDiv != undefined);
+        return this.stepDiv;
     }
 
     setProof(proof : Proof){
@@ -228,7 +232,7 @@ export type FormulaMenuEntry =
     | FormulaAction
     | FormulaSubmenu;
 
-export function showFormulaMenu(formula: Formula, items: FormulaMenuEntry[], x: number, y: number): void {
+export function showFormulaMenu(items: FormulaMenuEntry[], x: number, y: number): void {
     document.querySelector(".formula-popup-menu")?.remove();
 
     const root_menu = createMenu(items);
@@ -247,7 +251,7 @@ export function showFormulaMenu(formula: Formula, items: FormulaMenuEntry[], x: 
 
         for (const item of menu_items) {
             if (item.type === "action") {
-                menu.appendChild(createAction(formula, item));
+                menu.appendChild(createAction(item));
             } else {
                 menu.appendChild(createSubmenu(item));
             }
@@ -256,7 +260,7 @@ export function showFormulaMenu(formula: Formula, items: FormulaMenuEntry[], x: 
         return menu;
     }
 
-    function createAction(formula: Formula, item: FormulaAction): HTMLButtonElement {
+    function createAction(item: FormulaAction): HTMLButtonElement {
         const button = document.createElement("button");
 
         button.type = "button";
