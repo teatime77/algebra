@@ -194,7 +194,10 @@ export class CopySide extends ProofStep {
         msg(`apply-copy-side:${this.sourceNode.getNodeDiv().tagName}`);
 
         if(this.sourceNode instanceof Formula){
-            const proof = this.sourceNode.startProof();
+            let proof = this.sourceNode.getOpenProof();
+            if(proof == undefined){
+                proof = this.sourceNode.startProof();
+            }
             proof.addProofStep(this);
 
             const parentDiv = proof.proofContent;

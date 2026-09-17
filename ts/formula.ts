@@ -55,6 +55,16 @@ export class Formula implements PredicateNode {
         return this.predicate;
     }
 
+    getOpenProof() : Proof | undefined {
+        if(this.proofs.length == 0){
+            return undefined;
+        }
+        else{
+            return this.proofs.at(-1);
+        }
+
+    }
+
     startProof() : Proof {
         const proof = new Proof(this);
         this.proofs.push(proof);

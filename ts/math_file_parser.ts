@@ -126,8 +126,6 @@ function readFormula(lines:string[], formula : Formula){
 
             const proof = formula.startProof();
 
-            putTex(formula.theorem.theoremDiv, formula.predicate);
-
             readProof(formula, lines, proof);
         }
         else{
