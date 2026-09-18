@@ -377,18 +377,42 @@ export async function saveData(filename: string, data: unknown): Promise<void> {
     }
 }
 
-export function setSignInMul(term : Term){
-    if(term instanceof App){
-        setSignInMul(term.fnc);
-        term.args.forEach(x => setSignInMul(x));
-        if(term.fncName == "*"){
-            let val = Rational.one();
-            for(const arg of term.args){
-                val.setmul(arg.value);
-                arg.value.set(1);
+function allMuls(term : Term) : App[] {
+    return term.allTerms().filter(x => x.isMul()) as App[];
+}
+
+function setSignInMul(root : Term){
+    for(const mul of allMuls(root)){
+        let val = Rational.one();
+        for(const arg of mul.args){
+            val.setmul(arg.value);
+            arg.value.set(1);
+        }
+
+        mul.value.setmul(val);
+    }
+}
+
+function removeOneInMul(root : Term){
+    for(const mul of allMuls(root)){
+        const ones = mul.args.filter(x => x instanceof ConstNum && x.isInt() && x.int() == 1);
+        if(ones.length != 0){
+            for(const one of ones){
+                one.remArg();
             }
 
-            term.value.setmul(val);
+            if(mul.args.length == 0){
+                const one = ConstNum.one();
+                mul.replaceTerm(one);
+            }
+            else if(mul.args.length == 1){
+                mul.replaceTerm(mul.getArg(0));
+            }
         }
     }
+}
+
+export function simplifyNew(root : Term){
+    setSignInMul(root);
+    removeOneInMul(root);
 }
