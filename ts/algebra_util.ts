@@ -377,3 +377,18 @@ export async function saveData(filename: string, data: unknown): Promise<void> {
     }
 }
 
+export function setSignInMul(term : Term){
+    if(term instanceof App){
+        setSignInMul(term.fnc);
+        term.args.forEach(x => setSignInMul(x));
+        if(term.fncName == "*"){
+            let val = Rational.one();
+            for(const arg of term.args){
+                val.setmul(arg.value);
+                arg.value.set(1);
+            }
+
+            term.value.setmul(val);
+        }
+    }
+}

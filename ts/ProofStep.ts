@@ -2,7 +2,7 @@ import { App, ConstNum, parseMath, Parser, RefVar, Term, Variable } from "@parse
 import { Formula, mathLib } from "./formula.js";
 import type { PredicateNode, Theorem } from "./formula.js";
 import { checkRefVar, matchFormula, SearchMatchFormula } from "./formula_matcher.js";
-import { FormulaMenuEntry, ProofStep, putStr } from "./algebra_util";
+import { FormulaMenuEntry, ProofStep, putStr, setSignInMul } from "./algebra_util";
 import { assert, msg, MyError, range } from "@i18n";
 import { mathSelection, TexSelection, toTex } from "./tex";
 import { Str } from "../../parser/ts/parser.js";
@@ -186,6 +186,8 @@ export class CopySide extends ProofStep {
         checkRefVar(eq);
 
         this.result = eq.getArg(this.sideIdx).clone2();
+        setSignInMul(this.result);
+
         checkRefVar(this.result);
         this.result.setParent(null);
     }
@@ -304,6 +306,7 @@ export class Rewrite extends ProofStep {
             target_cp.replaceTerm(side2);
             this.result = target_root_cp;
         }
+        setSignInMul(this.result);
 
         this.result.setParent(null);
     }
