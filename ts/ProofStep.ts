@@ -2,10 +2,11 @@ import { App, ConstNum, parseMath, Parser, RefVar, Term, Variable } from "@parse
 import { Formula, mathLib } from "./formula.js";
 import type { PredicateNode, Theorem } from "./formula.js";
 import { checkRefVar, matchFormula, SearchMatchFormula } from "./formula_matcher.js";
-import { FormulaMenuEntry, ProofStep, putStr, simplifyNew } from "./algebra_util";
+import { FormulaMenuEntry, ProofStep, putStr } from "./algebra_util";
 import { assert, msg, MyError, range } from "@i18n";
 import { mathSelection, TexSelection, toTex } from "./tex";
 import { Str } from "../../parser/ts/parser.js";
+import { simplifyNew } from "./manipulation.js";
 
 function parthFormulaPath(formulaSsideId: string) : [Theorem, Formula, number] {
     const items = formulaSsideId.split(".");
@@ -223,18 +224,9 @@ export class Rewrite extends ProofStep {
     sideIdx2 : number;
     paramDic : Map<Variable, Term>;
 
-    static makeRewrite(parentFormula : Formula, prevStep : ProofStep, line: string){
-        assert(prevStep.result != undefined);
-        checkRefVar(prevStep.result!);
-
-        const parser = new Parser(line.slice(1));
-        const terms:Term[] = [];
-        parser.readList(terms);
-        terms.forEach(x => x.setString());
-        const s = terms.map(x => `${x}`).join(", ");
-        msg(`step-proof:${s}`);
+    static makeRewrite(parentFormula : Formula, prevStep : ProofStep, line: string, terms:Term[]) : Rewrite{
         assert(terms.length == 4 || terms.length == 5);
-        assert(terms[1] instanceof RefVar);
+        
         const targetTmp = terms[0];
         const formulaSsideIdRef = terms[1] as RefVar;
         const [theorem, formula, sideIdx] = parthFormulaPath(formulaSsideIdRef.name);
@@ -299,6 +291,11 @@ export class Rewrite extends ProofStep {
         const [target_root_cp, target_cp] = this.target.cloneRoot();
         
         const side2 = this.predicate_cp.getArg(this.sideIdx2).clone2();
+        assert(target_cp.value.isInt() && Math.abs(target_cp.value.int()) == 1);
+        if(target_cp.value.int() == -1){
+            side2.value.changeSign();
+        }
+
         if(target_root_cp == target_cp){
             this.result = side2;
         }
@@ -310,6 +307,7 @@ export class Rewrite extends ProofStep {
         simplifyNew(this.result);
 
         this.result.setParent(null);
+        this.result.setString();
     }
 
     applyProofStep() : void {

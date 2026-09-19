@@ -1,9 +1,11 @@
 import { assert, fetchText, msg, MyError } from "@i18n";
-import { App, parseMath, Parser, Term, Variable } from "@parser";
+import { App, parseMath, Parser, RefVar, Term, Variable } from "@parser";
 import { Formula, mathLib, PredicateNode, Theorem, VarDecl } from "./formula.js";
 import type { Proof } from "./proof.js";
 import { DummyStep, FormulaMenuEntry, ProofStep, putTex, saveData } from "./algebra_util";
 import { CopySide, makeFormulaDiv, Rewrite } from "./ProofStep";
+import { checkRefVar } from "./formula_matcher.js";
+import { CancelCommonFactors, testCancelCommonFactors } from "./manipulation.js";
 
 function splitKeyword(line : string) : [string, string] {
     const k = line.indexOf(" ");
@@ -65,6 +67,37 @@ export const formulaMenuItems: FormulaMenuEntry[] = [
 
 let comments : string[] = [];
 
+function readProofStep(parentFormula : Formula, prevStep : ProofStep, line: string){
+    assert(prevStep.result != undefined);
+    checkRefVar(prevStep.result!);
+
+    const parser = new Parser(line.slice(1));
+    const terms:Term[] = [];
+    parser.readList(terms);
+    terms.forEach(x => x.setString());
+    const s = terms.map(x => `${x}`).join(", ");
+    msg(`step-proof:${s}`);
+    assert(terms[1] instanceof RefVar);
+
+    const formulaSsideIdRef = terms[1] as RefVar;
+    let step : ProofStep | undefined;
+    msg(`#${CancelCommonFactors.name}`)
+    if(formulaSsideIdRef.name == `#${CancelCommonFactors.name}`){
+
+        assert(terms.length == 3);
+        const target = terms[0] as App;
+        step = testCancelCommonFactors(prevStep, target);
+        if(step == undefined){
+            throw new MyError();
+        }
+    }
+    else{
+        step = Rewrite.makeRewrite(parentFormula, prevStep, line, terms);
+    }
+    
+    return step;
+}
+
 function readProof(formula : Formula, lines:string[], proof : Proof){
     let prevStep : ProofStep | undefined;
     while(lines.length != 0){
@@ -83,7 +116,7 @@ function readProof(formula : Formula, lines:string[], proof : Proof){
             if(prevStep == undefined){
                 throw new MyError();
             }
-            prevStep = Rewrite.makeRewrite(formula, prevStep, line);
+            prevStep = readProofStep(formula, prevStep, line);
             break;
 
         case "©":{

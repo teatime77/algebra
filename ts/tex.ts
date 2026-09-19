@@ -7,6 +7,7 @@ import "katex/dist/katex.min.css";
 import { Formula, PredicateNode } from "./formula";
 import { ProofStep, showFormulaMenu } from "./algebra_util";
 import { makeFormulaMenu, makeProofStepMenu } from "./ProofStep";
+import { SearchSimplifier } from "./manipulation";
 
 const nodeMap = new Map<string, Term>();
 
@@ -696,8 +697,11 @@ export class TexSelection {
             );
         }
         else if(this.node instanceof ProofStep){
+            this.node.result!.setString();
+            const items = makeProofStepMenu(this.node);
+            SearchSimplifier(this.node, items)
             showFormulaMenu(
-                makeProofStepMenu(this.node),
+                items,
                 event.clientX, event.clientY
             );
         }
